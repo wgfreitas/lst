@@ -1,0 +1,90 @@
+# ============================================================
+# LST (Log Sec Triage) — .gitignore
+# Organizado por contexto: Python → ambientes → ferramentas → IDE → OS → projeto
+# ============================================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+share/python-wheels/
+MANIFEST
+
+# ---------- Virtual environments ----------
+.venv/
+venv/
+env/
+ENV/
+.python-version   # remova esta linha se optar por commitar a versão
+
+# ---------- Testing & coverage ----------
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.cache/
+nosetests.xml
+*.cover
+.hypothesis/
+
+# ---------- Type checking ----------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# ---------- Secrets & local config ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials.json
+
+# ---------- IDEs & editors ----------
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+.history/
+.claude/
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------- LST-specific ----------
+# Logs reais não devem entrar no repositório — só fixtures sintéticas
+*.log
+!tests/fixtures/*.log
+
+# Artefatos de execução do LST
+reports/
+output/
+*.lst-report.md
+
+# Template miner state (se drain3 persistir snapshots)
+drain3_state.bin
+*.drain3
+
+# Jupyter notebooks (caso use para exploração)
+.ipynb_checkpoints/
+*.ipynb
