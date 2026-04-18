@@ -26,6 +26,8 @@ from datetime import UTC, datetime
 from drain3 import TemplateMiner
 from drain3.template_miner_config import TemplateMinerConfig
 
+from lst.aggregator.extractors import extract_ips, extract_users
+from lst.parser._mined_line import MinedLine
 from lst.schemas import LogTemplate
 
 _ISO_TS = re.compile(
@@ -162,12 +164,14 @@ def mine_templates(
     sim_th: float = 0.4,
     depth: int = 4,
     max_clusters: int = 1024,
-) -> list[LogTemplate]:
-    """Cluster ``lines`` with drain3 and return frozen ``LogTemplate`` aggregates.
+) -> tuple[list[LogTemplate], list[MinedLine]]:
+    """Cluster ``lines`` with drain3 and return templates + per-line DTOs.
 
     The input is consumed lazily, so pairing this with
     :func:`lst.parser.reader.iter_log_lines` keeps memory flat regardless
-    of file size.
+    of file size. The per-line :class:`MinedLine` list preserves input
+    order so the downstream Aggregator can compute timestamp-ordered
+    metrics (peak rate, first/last seen) without re-sorting.
 
     Args:
         lines: Iterable of raw log lines; syslog prefixes, if present, are
@@ -179,13 +183,19 @@ def mine_templates(
             least-recently-used cluster once this cap is exceeded.
 
     Returns:
-        A list of ``LogTemplate`` sorted by ``cluster_id`` ascending.
+        A tuple ``(templates, mined_lines)``:
+
+        * ``templates`` -- :class:`LogTemplate` list sorted by
+          ``cluster_id`` ascending.
+        * ``mined_lines`` -- :class:`MinedLine` list in input (read)
+          order, with timestamps, extracted IPs, and extracted users.
     """
     miner = TemplateMiner(
         persistence_handler=None,
         config=_make_config(sim_th, depth, max_clusters),
     )
     accumulators: dict[int, _TemplateAccumulator] = {}
+    mined_lines: list[MinedLine] = []
 
     for raw in lines:
         timestamp = _extract_timestamp(raw) or datetime.now(UTC)
@@ -198,6 +208,14 @@ def mine_templates(
             accumulator = _TemplateAccumulator(cluster_id=cluster_id)
             accumulators[cluster_id] = accumulator
         accumulator.update(raw, timestamp)
+        mined_lines.append(
+            MinedLine(
+                cluster_id=cluster_id,
+                timestamp=timestamp,
+                extracted_ips=extract_ips(raw),
+                extracted_users=extract_users(raw),
+            )
+        )
 
     templates: list[LogTemplate] = []
     for cluster in sorted(miner.drain.clusters, key=lambda c: c.cluster_id):
@@ -215,4 +233,4 @@ def mine_templates(
                 last_seen=accumulator.last_seen or fallback,
             )
         )
-    return templates
+    return templates, mined_lines
