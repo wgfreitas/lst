@@ -23,7 +23,7 @@ MANIFEST
 venv/
 env/
 ENV/
-.python-version   # remova esta linha se optar por commitar a versão
+# .python-version   # remova esta linha se optar por commitar a versão
 
 # ---------- Testing & coverage ----------
 .pytest_cache/
