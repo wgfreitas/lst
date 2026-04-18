@@ -121,6 +121,12 @@
   plugins = ["pydantic.mypy"]
   exclude = ["tests/fixtures/"]
 
+  # drain3 has no py.typed marker and no published stubs (no releases since
+  # 2022). Scope the untyped-import override narrowly to that package.
+  [[tool.mypy.overrides]]
+  module = ["drain3", "drain3.*"]
+  ignore_missing_imports = true
+
 
   # ---------------------------------------------------------------------------
   # pytest — test discovery + async mode + coverage gate
