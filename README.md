@@ -37,7 +37,7 @@ The LLM is used **only for the explanation layer** — detection remains determi
 ## Installation (development)
 
 ```bash
-git clone https://github.com/<your-user>/lst.git
+git clone https://github.com/wgfreitas/lst.git
 cd lst
 python3.11 -m venv .venv
 source .venv/bin/activate
