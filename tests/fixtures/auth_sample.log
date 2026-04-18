@@ -1,0 +1,50 @@
+Apr 18 10:00:01 server sshd[1001]: Failed password for root from 203.0.113.10 port 22 ssh2
+Apr 18 10:00:15 server sshd[1001]: Failed password for root from 203.0.113.11 port 22 ssh2
+Apr 18 10:01:03 server sshd[1002]: Failed password for root from 203.0.113.12 port 22 ssh2
+Apr 18 10:01:45 server sshd[1002]: Failed password for root from 203.0.113.13 port 22 ssh2
+Apr 18 10:03:10 server sshd[1003]: Failed password for root from 203.0.113.14 port 22 ssh2
+Apr 18 10:05:22 server sshd[1003]: Failed password for root from 203.0.113.15 port 22 ssh2
+Apr 18 10:07:05 server sshd[1004]: Failed password for root from 203.0.113.16 port 22 ssh2
+Apr 18 10:09:18 server sshd[1004]: Failed password for root from 203.0.113.17 port 22 ssh2
+Apr 18 10:11:40 server sshd[1005]: Failed password for root from 203.0.113.18 port 22 ssh2
+Apr 18 10:13:55 server sshd[1005]: Failed password for root from 203.0.113.19 port 22 ssh2
+Apr 18 10:15:12 server sshd[1006]: Failed password for root from 203.0.113.20 port 22 ssh2
+Apr 18 10:17:30 server sshd[1006]: Failed password for root from 203.0.113.21 port 22 ssh2
+Apr 18 10:19:45 server sshd[1007]: Failed password for root from 203.0.113.22 port 22 ssh2
+Apr 18 10:21:08 server sshd[1007]: Failed password for root from 203.0.113.23 port 22 ssh2
+Apr 18 10:23:20 server sshd[1008]: Failed password for root from 203.0.113.24 port 22 ssh2
+Apr 18 10:25:35 server sshd[1008]: Failed password for root from 203.0.113.25 port 22 ssh2
+Apr 18 10:27:05 server sshd[1009]: Failed password for root from 203.0.113.26 port 22 ssh2
+Apr 18 10:28:22 server sshd[1009]: Failed password for root from 203.0.113.27 port 22 ssh2
+Apr 18 10:29:18 server sshd[1010]: Failed password for root from 203.0.113.28 port 22 ssh2
+Apr 18 10:29:55 server sshd[1010]: Failed password for root from 203.0.113.29 port 22 ssh2
+Apr 18 11:00:05 server sshd[2001]: Accepted password for admin from 192.0.2.10 port 22 ssh2
+Apr 18 11:04:12 server sshd[2002]: Accepted password for admin from 192.0.2.11 port 22 ssh2
+Apr 18 11:08:25 server sshd[2003]: Accepted password for admin from 192.0.2.12 port 22 ssh2
+Apr 18 11:12:40 server sshd[2004]: Accepted password for admin from 192.0.2.13 port 22 ssh2
+Apr 18 11:16:55 server sshd[2005]: Accepted password for admin from 192.0.2.14 port 22 ssh2
+Apr 18 11:21:10 server sshd[2006]: Accepted password for admin from 192.0.2.15 port 22 ssh2
+Apr 18 11:25:25 server sshd[2007]: Accepted password for admin from 192.0.2.16 port 22 ssh2
+Apr 18 11:29:40 server sshd[2008]: Accepted password for admin from 192.0.2.17 port 22 ssh2
+Apr 18 11:33:55 server sshd[2009]: Accepted password for admin from 192.0.2.18 port 22 ssh2
+Apr 18 11:38:10 server sshd[2010]: Accepted password for admin from 192.0.2.19 port 22 ssh2
+Apr 18 11:42:25 server sshd[2011]: Accepted password for admin from 192.0.2.20 port 22 ssh2
+Apr 18 11:46:40 server sshd[2012]: Accepted password for admin from 192.0.2.21 port 22 ssh2
+Apr 18 11:50:55 server sshd[2013]: Accepted password for admin from 192.0.2.22 port 22 ssh2
+Apr 18 11:55:10 server sshd[2014]: Accepted password for admin from 192.0.2.23 port 22 ssh2
+Apr 18 11:59:25 server sshd[2015]: Accepted password for admin from 192.0.2.24 port 22 ssh2
+Apr 18 12:00:10 server sshd[3001]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Apr 18 12:05:20 server sshd[3002]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Apr 18 12:10:30 server sshd[3003]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Apr 18 12:15:40 server sshd[3004]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Apr 18 12:20:50 server sshd[3005]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Apr 18 12:26:00 server sshd[3006]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Apr 18 12:31:10 server sshd[3007]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Apr 18 12:36:20 server sshd[3008]: pam_unix(sshd:session): session opened for user admin by (uid=0)
+Apr 18 13:00:30 server sshd[4001]: pam_unix(sshd:session): session closed for user admin
+Apr 18 13:04:40 server sshd[4002]: pam_unix(sshd:session): session closed for user admin
+Apr 18 13:09:50 server sshd[4003]: pam_unix(sshd:session): session closed for user admin
+Apr 18 13:14:55 server sshd[4004]: pam_unix(sshd:session): session closed for user admin
+Apr 18 13:19:45 server sshd[4005]: pam_unix(sshd:session): session closed for user admin
+Apr 18 13:45:00 server sshd[5001]: reverse mapping checking getaddrinfo for malicious.example.com failed - POSSIBLE BREAK-IN ATTEMPT!
+Apr 18 13:55:30 server sshd[5002]: Connection closed by invalid user testuser 198.51.100.42 port 22 [preauth]
