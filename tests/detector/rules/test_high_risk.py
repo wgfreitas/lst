@@ -67,3 +67,9 @@ def test_high_risk_context_notes_name_the_matched_keyword(
     assert event is not None
     assert event.context_notes is not None
     assert "break_in_attempt" in event.context_notes
+
+
+def test_high_risk_exposes_non_empty_pt_description(rule: HighRiskPatternRule) -> None:
+    """``description_pt`` is a non-empty string the Reporter can surface."""
+    assert isinstance(rule.description_pt, str)
+    assert rule.description_pt.strip() != ""

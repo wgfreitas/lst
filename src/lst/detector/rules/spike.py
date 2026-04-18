@@ -36,6 +36,7 @@ class SpikeRule:
 
     name: str = "rate_spike_3sigma_or_absolute"
     category: FlagCategory = FlagCategory.SPIKE
+    description_pt: str = "picos anormais de taxa vs. média da janela"
 
     def evaluate(self, aggregated: AggregatedTemplate) -> FlaggedEvent | None:
         """Fire on absolute or relative rate spikes with enough events."""

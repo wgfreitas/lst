@@ -25,6 +25,7 @@ class VarietyRule:
 
     name: str = "source_variety_no_auth_context"
     category: FlagCategory = FlagCategory.VARIETY
+    description_pt: str = "fan-in de IPs sem verbo de autenticação claro"
 
     def evaluate(self, aggregated: AggregatedTemplate) -> FlaggedEvent | None:
         """Fire on IP-diverse templates lacking success/fail verbs."""

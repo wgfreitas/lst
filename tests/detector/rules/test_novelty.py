@@ -64,3 +64,9 @@ def test_novelty_context_notes_include_total_count_hint(
     assert event.context_notes is not None
     assert "singleton" in event.context_notes.lower()
     assert "total_count=1" in event.context_notes
+
+
+def test_novelty_exposes_non_empty_pt_description(rule: NoveltyRule) -> None:
+    """``description_pt`` is a non-empty string the Reporter can surface."""
+    assert isinstance(rule.description_pt, str)
+    assert rule.description_pt.strip() != ""

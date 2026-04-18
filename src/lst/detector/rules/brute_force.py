@@ -28,6 +28,7 @@ class BruteForceRule:
 
     name: str = "brute_force_by_ip_cardinality"
     category: FlagCategory = FlagCategory.BRUTE_FORCE
+    description_pt: str = "muitos IPs distintos contra padrão de falha"
 
     def evaluate(self, aggregated: AggregatedTemplate) -> FlaggedEvent | None:
         """Fire on IP-diverse, failure-verbed templates."""

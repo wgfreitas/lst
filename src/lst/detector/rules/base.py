@@ -14,6 +14,10 @@ Contract summary:
   ``cluster_id``).
 * ``category`` -- the broad :class:`FlagCategory` this rule produces.
   Two rules may share a category; the engine's tie-break uses it.
+* ``description_pt`` -- one-line pt-BR description of what the rule
+  catches. Lives on the rule (not on the Reporter) so adding a rule
+  never requires editing a translation table elsewhere -- the Reporter
+  just iterates :data:`ACTIVE_RULES`.
 * ``evaluate`` -- pure function from an :class:`AggregatedTemplate` to
   an optional :class:`FlaggedEvent`. Returning ``None`` means "no
   match". Rules must be side-effect-free (no I/O, no logging) so
@@ -32,6 +36,7 @@ class Rule(Protocol):
 
     name: str
     category: FlagCategory
+    description_pt: str
 
     def evaluate(self, aggregated: AggregatedTemplate) -> FlaggedEvent | None:
         """Return a :class:`FlaggedEvent` if this rule fires, else ``None``.

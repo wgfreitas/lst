@@ -101,3 +101,9 @@ def test_brute_force_context_notes_report_counts_and_ratio(
     assert event.context_notes is not None
     assert "12" in event.context_notes
     assert "ratio" in event.context_notes.lower()
+
+
+def test_brute_force_exposes_non_empty_pt_description(rule: BruteForceRule) -> None:
+    """``description_pt`` is a non-empty string the Reporter can surface."""
+    assert isinstance(rule.description_pt, str)
+    assert rule.description_pt.strip() != ""

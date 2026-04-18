@@ -28,6 +28,7 @@ class HighRiskPatternRule:
 
     name: str = "high_risk_keyword_match"
     category: FlagCategory = FlagCategory.HIGH_RISK_PATTERN
+    description_pt: str = "padrões conhecidos de alto risco (IOCs/alertas)"
 
     def evaluate(self, aggregated: AggregatedTemplate) -> FlaggedEvent | None:
         """Fire when template or any sample line matches a known IOC."""

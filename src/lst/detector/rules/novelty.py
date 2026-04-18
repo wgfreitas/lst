@@ -25,6 +25,7 @@ class NoveltyRule:
 
     name: str = "novelty_singleton"
     category: FlagCategory = FlagCategory.NOVELTY
+    description_pt: str = "templates vistos apenas uma vez na janela"
 
     def evaluate(self, aggregated: AggregatedTemplate) -> FlaggedEvent | None:
         """Fire when the cluster has exactly one matched line."""

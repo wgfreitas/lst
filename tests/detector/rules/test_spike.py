@@ -107,3 +107,9 @@ def test_spike_context_notes_include_peak_and_mean(
     assert event.context_notes is not None
     assert "peak" in event.context_notes.lower()
     assert "0.50" in event.context_notes
+
+
+def test_spike_exposes_non_empty_pt_description(rule: SpikeRule) -> None:
+    """``description_pt`` is a non-empty string the Reporter can surface."""
+    assert isinstance(rule.description_pt, str)
+    assert rule.description_pt.strip() != ""
