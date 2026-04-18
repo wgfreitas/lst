@@ -1,0 +1,147 @@
+  # LST (Log Sec Triage) — single source of truth.
+  # Covers metadata, deps, CLI entry point, build config, and tool settings
+  # (ruff, mypy, pytest, coverage). No setup.py / setup.cfg / requirements.txt.
+
+  [build-system]
+  requires = ["hatchling>=1.27"]
+  build-backend = "hatchling.build"
+
+
+  # ---------------------------------------------------------------------------
+  # Project metadata (PEP 621)
+  # ---------------------------------------------------------------------------
+  [project]
+  name = "lst"
+  version = "0.1.0"
+  description = "Security log triage CLI that reduces gigabytes of raw logs to dozens of actionable events."
+  readme = "README.md"
+  requires-python = ">=3.11,<3.12"
+  license = { file = "LICENSE" }
+  authors = [
+    { name = "Wagner Freitas", email = "wgfreitas@gmail.com" },
+  ]
+
+  keywords = ["security", "logs", "SIEM", "LLM", "triage"]
+  classifiers = [
+      "Development Status :: 3 - Alpha",
+      "Environment :: Console",
+      "Intended Audience :: System Administrators",
+      "Intended Audience :: Information Technology",
+      "License :: OSI Approved :: MIT License",
+      "Operating System :: POSIX :: Linux",
+      "Programming Language :: Python :: 3",
+      "Programming Language :: Python :: 3.11",
+      "Topic :: Security",
+      "Topic :: System :: Logging",
+      "Topic :: System :: Systems Administration",
+      "Typing :: Typed",
+  ]
+
+  # Runtime dependencies.
+  # Compatible-release pins (~=) allow patch/minor security fixes without
+  # breaking reproducibility. 0.x packages use ~=X.Y.Z (patches only);
+  # stable 1.x+ use ~=X.Y (minor + patches).
+  # Notes:
+  #   - `rich` and `shellingham` ship as direct deps of modern Typer (>=0.12),
+  #     so there is no need for `typer[all]` and no explicit `rich` entry.
+  #   - `pydantic-settings[dotenv]` pulls `python-dotenv` transitively — this
+  #     is what enables `.env` loading; declaring `python-dotenv` separately
+  #     would be redundant.
+  dependencies = [
+      "typer~=0.24.0",
+      "drain3~=0.9.11",
+      "pydantic~=2.10",
+      "pydantic-settings~=2.13",
+      "httpx~=0.28.0",
+      "openai~=2.0",
+  ]
+
+  [project.optional-dependencies]
+  # Minimal test stack — CI jobs that only run tests install `[test]`.
+  test = [
+      "pytest~=8.3",
+      "pytest-asyncio~=0.24.0",
+      "pytest-cov~=6.0",
+      "pytest-mock~=3.14",
+      "respx~=0.22.0",
+  ]
+  # Full dev stack = test + lint + type-check. Self-reference (`lst[test]`)
+  # pulls the test group transitively, so `pip install -e .[dev]` is enough.
+  dev = [
+      "lst[test]",
+      "ruff~=0.8.0",
+      "mypy~=1.13",
+  ]
+
+  [project.urls]
+  Homepage = "https://github.com/wgfreitas/lst"
+  Issues = "https://github.com/wgfreitas/lst/issues"
+  Changelog = "https://github.com/wgfreitas/lst/blob/main/CHANGELOG.md"
+
+  # CLI entry point — Typer `app` object in src/lst/cli.py. Typer instances
+  # are callable, so no wrapper function is required.
+  [project.scripts]
+  lst = "lst.cli:app"
+
+
+  # ---------------------------------------------------------------------------
+  # Hatch build configuration (src-layout)
+  # ---------------------------------------------------------------------------
+  [tool.hatch.build.targets.wheel]
+  packages = ["src/lst"]
+
+
+  # ---------------------------------------------------------------------------
+  # Ruff — lint + format (replaces black, isort, flake8)
+  # ---------------------------------------------------------------------------
+  [tool.ruff]
+  line-length = 100
+  target-version = "py311"
+  extend-exclude = [".venv", "build", "dist"]
+
+  [tool.ruff.lint]
+  # Start strict — add explicit ignores only when a concrete case appears.
+  # E/W pycodestyle, F pyflakes, I isort, N pep8-naming, UP pyupgrade,
+  # B bugbear, SIM simplify, C4 comprehensions, PTH pathlib, RUF ruff-native.
+  select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "C4", "PTH", "RUF"]
+  ignore = []
+
+  [tool.ruff.format]
+  quote-style = "double"
+  indent-style = "space"
+  line-ending = "lf"
+
+
+  # ---------------------------------------------------------------------------
+  # mypy — strict type checking with Pydantic plugin
+  # ---------------------------------------------------------------------------
+  [tool.mypy]
+  strict = true
+  python_version = "3.11"
+  plugins = ["pydantic.mypy"]
+  exclude = ["tests/fixtures/"]
+
+
+  # ---------------------------------------------------------------------------
+  # pytest — test discovery + async mode + coverage gate
+  # ---------------------------------------------------------------------------
+  [tool.pytest.ini_options]
+  testpaths = ["tests"]
+  asyncio_mode = "auto"
+  addopts = "--strict-markers --cov=lst --cov-report=term-missing --cov-fail-under=70"
+
+
+  # ---------------------------------------------------------------------------
+  # Coverage.py
+  # ---------------------------------------------------------------------------
+  [tool.coverage.run]
+  source = ["lst"]
+  branch = true
+
+  [tool.coverage.report]
+  exclude_lines = [
+      "pragma: no cover",
+      "if TYPE_CHECKING:",
+      "raise NotImplementedError",
+  ]
+  show_missing = true
