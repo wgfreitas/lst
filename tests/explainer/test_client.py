@@ -8,6 +8,8 @@ assertion at the end of each test guards against accidental bypass
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -130,3 +132,54 @@ async def test_complete_elapsed_is_int(settings_fixture: Settings) -> None:
         )
     assert isinstance(elapsed, int)
     assert elapsed >= 0
+
+
+async def test_complete_includes_max_tokens_in_payload(
+    settings_fixture: Settings,
+) -> None:
+    """``max_tokens`` from settings is serialised into the outbound request."""
+    payload = _chat_response_payload('{"explanation":"a","severity":"low","next_action":"b"}')
+    with respx.mock(assert_all_called=True) as router:
+        route = router.post(_ENDPOINT).mock(return_value=httpx.Response(200, json=payload))
+        client = OllamaClient(settings_fixture)
+        await client.complete(
+            "system",
+            "user",
+            model="test-model",
+            timeout=5.0,
+            json_mode=True,
+        )
+        sent = json.loads(route.calls[0].request.content.decode("utf-8"))
+    assert sent["max_tokens"] == settings_fixture.llm_max_tokens
+    assert sent["response_format"] == {"type": "json_object"}
+
+
+async def test_complete_fallback_also_includes_max_tokens(
+    settings_fixture: Settings,
+) -> None:
+    """The json-mode fallback retry also carries ``max_tokens``."""
+    bad_request = httpx.Response(
+        400,
+        json={
+            "error": {
+                "message": "response_format json_object is not supported by this model",
+                "type": "invalid_request_error",
+            }
+        },
+    )
+    good_payload = _chat_response_payload('{"explanation":"a","severity":"low","next_action":"b"}')
+    with respx.mock(assert_all_called=True) as router:
+        route = router.post(_ENDPOINT).mock(
+            side_effect=[bad_request, httpx.Response(200, json=good_payload)]
+        )
+        client = OllamaClient(settings_fixture)
+        await client.complete(
+            "system",
+            "user",
+            model="test-model",
+            timeout=5.0,
+        )
+        assert route.call_count == 2
+        retry_payload = json.loads(route.calls[1].request.content.decode("utf-8"))
+    assert retry_payload["max_tokens"] == settings_fixture.llm_max_tokens
+    assert "response_format" not in retry_payload

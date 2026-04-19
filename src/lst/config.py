@@ -47,6 +47,9 @@ class Settings(BaseSettings):
             HTTP client. Bounded to ``[1.0, 300.0]``.
         llm_max_retries: Automatic retry budget for transient failures
             (HTTP 5xx, rate-limit). Bounded to ``[0, 5]``.
+        llm_max_tokens: Hard cap on tokens the LLM may emit per response.
+            Bounded to ``[64, 4096]``; the default ``1024`` leaves room
+            for multi-sentence pt-BR explanations without truncation.
 
     Example:
         >>> from lst.config import Settings
@@ -88,4 +91,13 @@ class Settings(BaseSettings):
         ge=0,
         le=5,
         description="Automatic retry budget for transient LLM failures.",
+    )
+    llm_max_tokens: int = Field(
+        default=1024,
+        ge=64,
+        le=4096,
+        description=(
+            "Maximum tokens the LLM may emit in a single response. Generous "
+            "default ensures multi-sentence pt-BR explanations aren't truncated."
+        ),
     )

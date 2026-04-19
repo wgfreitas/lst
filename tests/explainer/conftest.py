@@ -123,4 +123,5 @@ def settings_fixture() -> Settings:
         ollama_base_url="https://ollama.com/v1",
         llm_timeout_seconds=30.0,
         llm_max_retries=0,
+        llm_max_tokens=1024,
     )

@@ -90,6 +90,7 @@ class OllamaClient:
             max_retries=settings.llm_max_retries,
         )
         self._default_timeout = settings.llm_timeout_seconds
+        self._max_tokens = settings.llm_max_tokens
 
     async def complete(
         self,
@@ -145,10 +146,12 @@ class OllamaClient:
                 model=model,
                 messages=messages,
                 timeout=timeout,
+                max_tokens=self._max_tokens,
                 response_format={"type": "json_object"},
             )
         return await self._client.chat.completions.create(
             model=model,
             messages=messages,
             timeout=timeout,
+            max_tokens=self._max_tokens,
         )

@@ -40,9 +40,14 @@ def test_cli_scan_missing_file(runner: CliRunner) -> None:
     assert "não encontrado" in result.stderr
 
 
-def test_cli_scan_dry_run_to_stdout(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Dry-run scan streams the Markdown report to stdout."""
+def test_cli_scan_dry_run_to_stdout(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Dry-run scan streams the Markdown report to stdout (no API key needed)."""
     monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)  # avoid picking up a developer .env
     result = runner.invoke(app, ["scan", str(_FIXTURE), "--dry-run"])
     assert result.exit_code == 0, result.stderr
     assert "# Relatório de Triagem" in result.stdout
@@ -56,6 +61,7 @@ def test_cli_scan_dry_run_to_file(
 ) -> None:
     """``-o`` writes the Markdown to a file and keeps stdout quiet."""
     monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
     out_path = tmp_path / "report.md"
     result = runner.invoke(
         app,
