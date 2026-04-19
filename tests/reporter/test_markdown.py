@@ -132,15 +132,34 @@ def test_render_emoji_only_in_summary_not_in_event_bodies(
 def test_render_event_header_truncates_long_template(
     make_explained: Callable[..., ExplainedEvent],
 ) -> None:
-    """A 200-char template is cut to 80 with a trailing ellipsis."""
+    """A 200-char template is cut to 120 with a trailing ellipsis."""
     long_template = "A" * 200
     out = render(
         [make_explained(template=long_template)],
         source_path=_SOURCE_PATH,
         generated_at=_GENERATED_AT,
     )
-    assert "A" * 77 + "..." in out
+    assert "A" * 117 + "..." in out
     assert "A" * 200 not in out
+
+
+def test_render_preserves_break_in_attempt_in_header(
+    make_explained: Callable[..., ExplainedEvent],
+) -> None:
+    """A <=120-char template ending in 'POSSIBLE BREAK-IN ATTEMPT!' is not truncated."""
+    template = (
+        "reverse mapping checking getaddrinfo for malicious.example.com "
+        "failed - POSSIBLE BREAK-IN ATTEMPT!"
+    )
+    assert len(template) <= 120
+    out = render(
+        [make_explained(template=template)],
+        source_path=_SOURCE_PATH,
+        generated_at=_GENERATED_AT,
+    )
+    assert "POSSIBLE BREAK-IN ATTEMPT!" in out
+    assert "POSSIBLE BREAK-IN ATT..." not in out
+    assert "POSSI..." not in out
 
 
 def test_render_event_truncates_long_sample_line(
