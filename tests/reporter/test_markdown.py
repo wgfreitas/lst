@@ -201,6 +201,45 @@ def test_render_event_body_uses_pt_labels_for_severity_and_category(
     assert "**Categoria**: Brute Force" in out
 
 
+def test_render_singleton_hides_rate_numbers(
+    make_explained: Callable[..., ExplainedEvent],
+) -> None:
+    """total_count==1 renders '— (evento único)' instead of '1.00' rate."""
+    event = make_explained(
+        total_count=1,
+        rate_per_minute=1.0,
+        peak_rate_per_minute=1.0,
+        sample_lines=["Failed password for root from 203.0.113.10 port 22 ssh2"],
+    )
+    out = render(
+        [event],
+        source_path=_SOURCE_PATH,
+        generated_at=_GENERATED_AT,
+    )
+    stats_section = out.split("### Métricas")[1].split("###")[0]
+    assert "1.00" not in stats_section
+    assert stats_section.count("— (evento único)") == 2
+
+
+def test_render_multi_event_keeps_numeric_rate(
+    make_explained: Callable[..., ExplainedEvent],
+) -> None:
+    """total_count>1 keeps numeric rates; singleton marker stays absent."""
+    event = make_explained(
+        total_count=20,
+        rate_per_minute=0.67,
+        peak_rate_per_minute=2.00,
+    )
+    out = render(
+        [event],
+        source_path=_SOURCE_PATH,
+        generated_at=_GENERATED_AT,
+    )
+    assert "0.67" in out
+    assert "2.00" in out
+    assert "— (evento único)" not in out
+
+
 def test_render_event_metrics_table_includes_expected_values(
     make_explained: Callable[..., ExplainedEvent],
 ) -> None:

@@ -82,6 +82,13 @@ _MAX_TEMPLATE_HEADER_LENGTH = 120
 _MAX_SAMPLE_LINE_LENGTH = 120
 _MAX_SAMPLE_LINES_PER_EVENT = 3
 
+# When total_count == 1, a "rate per minute" derived from a 0-minute window
+# (first_seen == last_seen, with the Aggregator's max(1, span) fallback) is
+# mathematically defensible but visually confusing for analysts. Show this
+# marker instead; the underlying AggregatedTemplate still carries the numeric
+# value for the LLM prompt.
+_SINGLETON_RATE_DISPLAY = "— (evento único)"
+
 
 def render(
     events: list[ExplainedEvent],
@@ -202,13 +209,21 @@ def _render_stats_table(event: ExplainedEvent) -> str:
     aggregated = event.flagged.aggregated
     ips_preview = _format_sample_list(aggregated.sample_ips)
     users_preview = _format_sample_list(aggregated.sample_users)
+
+    if aggregated.total_count == 1:
+        rate_cell = _SINGLETON_RATE_DISPLAY
+        peak_cell = _SINGLETON_RATE_DISPLAY
+    else:
+        rate_cell = f"{aggregated.rate_per_minute:.2f}"
+        peak_cell = f"{aggregated.peak_rate_per_minute:.2f}"
+
     return (
         "### Métricas\n\n"
         "| Métrica | Valor |\n"
         "| --- | --- |\n"
         f"| Ocorrências totais | {aggregated.total_count} |\n"
-        f"| Taxa média (por minuto) | {aggregated.rate_per_minute:.2f} |\n"
-        f"| Pico (por minuto) | {aggregated.peak_rate_per_minute:.2f} |\n"
+        f"| Taxa média (por minuto) | {rate_cell} |\n"
+        f"| Pico (por minuto) | {peak_cell} |\n"
         f"| IPs únicos | {aggregated.unique_ips} |\n"
         f"| Usuários únicos | {aggregated.unique_users} |\n"
         f"| Amostra de IPs | {ips_preview} |\n"
