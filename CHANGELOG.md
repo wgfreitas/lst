@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-28
+
+### Added
+- Multi-provider support for any OpenAI-compatible endpoint (verified against
+  Ollama Cloud, GLM Coding/Z.ai). The LLM client was renamed `OllamaClient` ->
+  `OpenAICompatClient` to reflect this.
+- `LLM_STRUCTURED_MODE` setting (auto/json_schema/json_object/none): adaptive
+  structured-output strategy. 'auto' tries JSON Schema first, degrading
+  gracefully for providers that reject it.
+- Strict JSON Schema response format, which forces the required fields
+  (explanation, severity, next_action) at the API level. Resolves the
+  field-truncation seen with some providers.
+- `LLM_PARSE_RETRIES` setting (default 1): re-requests when a provider returns
+  an empty or unparseable 200-OK reply.
+- "Eventos não explicados" report footer: events detected but not explainable
+  by the LLM are listed instead of silently dropped.
+
+### Changed
+- Environment variables renamed `OLLAMA_*` -> `LLM_*` (`LLM_API_KEY`,
+  `LLM_MODEL`, `LLM_BASE_URL`). The legacy `OLLAMA_*` names still work via
+  aliases — existing `.env` files are not broken.
+- CLI error messages no longer hardcode "Ollama Cloud".
+
 ## [1.0.0] - 2026-04-19
 
 First stable release: the complete five-stage triage pipeline behind the
@@ -50,6 +73,7 @@ scaffold and matches the `v1.0.0` git tag.
 - PEP 561 typing marker at `src/lst/py.typed`.
 - Smoke test suite asserting the package imports and version shape.
 
-[Unreleased]: https://github.com/wgfreitas/lst/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/wgfreitas/lst/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/wgfreitas/lst/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/wgfreitas/lst/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/wgfreitas/lst/releases/tag/v0.1.0

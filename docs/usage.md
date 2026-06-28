@@ -28,12 +28,12 @@ O subcomando `lst version` imprime a versão instalada e encerra.
 lst scan /var/log/auth.log --dry-run
 ```
 
-Útil para validar o pipeline, estimar tempo de execução e conferir parsing antes de gastar tokens do Ollama Cloud.
+Útil para validar o pipeline, estimar tempo de execução e conferir parsing antes de gastar tokens do provedor LLM.
 
 ### Cenário B — triagem completa gravando em arquivo
 
 ```bash
-cp .env.example .env   # configurar OLLAMA_API_KEY
+cp .env.example .env   # configurar LLM_API_KEY
 lst scan /var/log/auth.log -o /tmp/report.md
 ```
 
@@ -55,6 +55,7 @@ O Markdown gerado segue sempre a mesma estrutura:
 - **Resumo por severidade**: contagem por nível (🔴 Crítico, 🟠 Alto, 🟡 Médio, 🟢 Baixo).
 - **Eventos**: ordenados por severidade decrescente e, em empate, por score decrescente.
 - **Apêndice**: lista das regras de detecção ativas com descrição curta.
+- **Rodapé "Eventos não explicados"** (opcional): eventos detectados que o LLM não conseguiu explicar mesmo após as re-tentativas (`LLM_PARSE_RETRIES`) são listados aqui para investigação manual — nunca somem em silêncio.
 
 Cada evento traz, em ordem: cabeçalho com categoria e regra disparada, severidade, janela de ocorrência, tabela de métricas (ocorrências totais, taxa média e de pico, cardinalidades de IPs e usuários, amostras), explicação em pt-BR produzida pelo LLM, próxima ação recomendada e as linhas originais do log.
 
@@ -74,11 +75,13 @@ O relatório já vem priorizado — basta ler de cima para baixo e tratar os eve
 
 A configuração vive em `.env` (ou em variáveis de ambiente). A lista completa de variáveis, padrões e faixas válidas está no [README](../README.md#configuration).
 
-Para um setup mínimo, basta definir `OLLAMA_API_KEY`:
+Para um setup mínimo, basta definir `LLM_API_KEY`:
 
 ```ini
-OLLAMA_API_KEY=sk-ollama-...
+LLM_API_KEY=sk-...
 ```
+
+Os nomes legados `OLLAMA_API_KEY` / `OLLAMA_MODEL` / `OLLAMA_BASE_URL` continuam aceitos como aliases (retrocompatibilidade), então um `.env` da v1.0.0 segue funcionando.
 
 As demais variáveis têm padrões sensatos. Em `--dry-run`, nem a chave é necessária.
 
@@ -88,13 +91,13 @@ As demais variáveis têm padrões sensatos. Em `--dry-run`, nem a chave é nece
 
 O path não existe ou está fora do escopo de leitura. Verificar com `ls -la` antes de rodar, ou usar um caminho absoluto.
 
-### `Erro: OLLAMA_API_KEY não configurada no .env`
+### `Erro: LLM_API_KEY não configurada no .env`
 
 A variável está ausente. Executar `cp .env.example .env` e editar o arquivo para preencher a chave. Em `--dry-run` a chave é dispensável.
 
-### `Erro de autenticação no Ollama Cloud`
+### `Erro de autenticação no provedor LLM`
 
-A chave existe mas é inválida ou expirou. Regenerar em https://ollama.com e atualizar o `.env`.
+A chave existe mas é inválida ou expirou. Regenerar a chave no painel do provedor (ex.: https://ollama.com) e atualizar o `.env`.
 
 ### `Timeout ao consultar o LLM`
 

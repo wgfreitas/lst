@@ -18,8 +18,8 @@ flowchart TD
 
     Output[/"Relatório de triagem<br/>(Markdown)"/]
 
-    Ollama(["Ollama Cloud<br/>ollama.com/v1"])
-    Env[/".env<br/>OLLAMA_API_KEY · OLLAMA_MODEL"/]
+    Provider(["Provedor LLM<br/>OpenAI-compatible<br/>(default: ollama.com/v1)"])
+    Env[/".env<br/>LLM_API_KEY · LLM_MODEL · LLM_BASE_URL"/]
 
     Input -->|"GB brutos (streaming)"| Parser
     Parser -->|"~1k templates únicos"| Aggregator
@@ -28,10 +28,10 @@ flowchart TD
     Explainer -->|"eventos + severidade + ação"| Reporter
     Reporter --> Output
 
-    Explainer -.->|"HTTPS · OpenAI-compatible"| Ollama
+    Explainer -.->|"HTTPS · OpenAI-compatible"| Provider
     Env -.->|"config"| Explainer
 
-    style Ollama fill:#cfe8ff,stroke:#1f6feb,stroke-width:2px,color:#000
+    style Provider fill:#cfe8ff,stroke:#1f6feb,stroke-width:2px,color:#000
     style Env fill:#fff8d6,stroke:#b58900,stroke-dasharray:4 3,color:#000
     style Input fill:#f5f5f5,stroke:#555,color:#000
     style Output fill:#e6f4ea,stroke:#2e7d32,color:#000

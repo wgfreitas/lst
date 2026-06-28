@@ -28,7 +28,7 @@ The result is a Markdown report an analyst reviews in minutes, not hours. Detect
   [3] Rule-based Detector
         |  deterministic rules -> tens of flagged events
         v
-  [4] LLM Explainer  <-- Ollama Cloud (HTTPS, OpenAI-compatible)
+  [4] LLM Explainer  <-- LLM provider (HTTPS, OpenAI-compatible)
         |  JSON: explanation, severity, next_action (pt-BR)
         v
   [5] Reporter
@@ -42,7 +42,7 @@ Each stage is isolated behind a Pydantic schema; stages communicate by passing f
 1. **Parser + Template Miner** streams the log line by line and runs [drain3](https://github.com/IBM/Drain3) to cluster syntactically similar lines into templates.
 2. **Aggregator** computes per-template statistics: total occurrences, mean and peak rate, unique IPs and users, sample IPs.
 3. **Detector** runs a registry of rules (one file per rule). Each rule scores each template; the engine dedups by `(score, priority)` and emits the flagged events.
-4. **Explainer** sends flagged events to the LLM and parses a strict JSON response into `ExplainedEvent` objects. The client retries without `response_format=json_object` if the model rejects structured mode.
+4. **Explainer** sends flagged events to the LLM and parses a strict JSON response into `ExplainedEvent` objects. Structured output is negotiated through a cascade — strict JSON Schema first, then `json_object`, then plain text — degrading only when the provider rejects a format; an empty or unparseable reply is re-requested before the event is set aside.
 5. **Reporter** renders a Markdown document: severity-ordered events, per-event metrics tables, rule references, and an appendix listing every active detection rule.
 
 ## Key design principles
@@ -73,10 +73,10 @@ Dry-run scan (skips the LLM, no API key required):
 lst scan /var/log/auth.log --dry-run
 ```
 
-Full scan (requires `OLLAMA_API_KEY` in the environment or a local `.env` file; see [Configuration](#configuration)):
+Full scan (requires `LLM_API_KEY` in the environment or a local `.env` file; see [Configuration](#configuration)):
 
 ```bash
-cp .env.example .env   # then edit .env and set OLLAMA_API_KEY
+cp .env.example .env   # then edit .env and set LLM_API_KEY
 lst scan /var/log/auth.log -o report.md
 ```
 
@@ -125,13 +125,13 @@ Bloquear os IPs identificados e analisar logs de sessão anterior para
 detecção de possíveis brechas.
 ```
 
-The emoji distribution block, sample lines, and per-rule appendix are omitted from the excerpt.
+The emoji distribution block, sample lines, and per-rule appendix are omitted from the excerpt. When the LLM cannot explain a flagged event (even after `LLM_PARSE_RETRIES`), the report ends with an **"Eventos não explicados"** footer listing those events, so coverage gaps are never silent.
 
 ## Architecture
 
 LST is a 5-stage pipeline. Data flows in one direction; each stage depends only on the previous stage's output schema. The LLM lives in stage 4 and nowhere else: *detection is deterministic, explanation is stochastic*. This split is what makes the tool auditable.
 
-See [docs/architecture.md](docs/architecture.md) for the Mermaid diagram with the full pipeline, external dependencies (Ollama Cloud, `.env`), and expected volumes at each stage.
+See [docs/architecture.md](docs/architecture.md) for the Mermaid diagram with the full pipeline, external dependencies (the LLM provider, `.env`), and expected volumes at each stage.
 
 The entry point is `lst.pipeline.run_pipeline`, an async coroutine that glues the five stages together. The CLI in `src/lst/cli.py` is intentionally thin — it handles flags, builds `Settings`, and maps known exceptions to pt-BR error messages with non-zero exit codes.
 
@@ -141,12 +141,27 @@ Configuration is read from the environment or a local `.env` file (loaded automa
 
 | Variable | Default | Range | Description |
 | --- | --- | --- | --- |
-| `OLLAMA_API_KEY` | *(required)* | non-empty string | Bearer token for Ollama Cloud. Startup fails if unset unless `--dry-run` is passed. |
-| `OLLAMA_MODEL` | `gpt-oss:20b` | non-empty string | Model identifier available on the caller's Ollama Cloud plan. |
-| `OLLAMA_BASE_URL` | `https://ollama.com/v1` | non-empty string | OpenAI-compatible chat-completions base URL. Override only when pointing at a self-hosted proxy. |
+| `LLM_API_KEY` | *(required)* | non-empty string | Bearer token for the LLM provider. Startup fails if unset unless `--dry-run` is passed. |
+| `LLM_MODEL` | `gpt-oss:20b` | non-empty string | Model identifier understood by the configured provider (e.g. `glm-5.2` on GLM Coding). |
+| `LLM_BASE_URL` | `https://ollama.com/v1` | non-empty string | OpenAI-compatible chat-completions base URL. Point it at any compatible provider. |
+| `LLM_STRUCTURED_MODE` | `auto` | `auto` / `json_schema` / `json_object` / `none` | Structured-output strategy. `auto` tries strict JSON Schema, then `json_object`, then free text, degrading only when the provider rejects a format. |
+| `LLM_PARSE_RETRIES` | `1` | `[0, 3]` | Extra attempts to re-request when the provider returns an empty or unparseable 200-OK reply. |
 | `LLM_TIMEOUT_SECONDS` | `60.0` | `[1.0, 300.0]` | Per-request wall-clock timeout for a single call to the LLM. |
-| `LLM_MAX_RETRIES` | `2` | `[0, 5]` | Automatic retry budget for transient failures (HTTP 5xx, rate-limit). |
+| `LLM_MAX_RETRIES` | `2` | `[0, 5]` | Automatic retry budget for transient HTTP failures (5xx, rate-limit). |
 | `LLM_MAX_TOKENS` | `1024` | `[64, 4096]` | Hard cap on tokens the LLM may emit per response. The default leaves room for multi-sentence Portuguese explanations. |
+
+> **Backward compatibility:** the legacy `OLLAMA_API_KEY`, `OLLAMA_MODEL`, and `OLLAMA_BASE_URL` names still work as aliases for the three `LLM_*` variables above, so a v1.0.0 `.env` keeps loading unchanged.
+
+### Provider support
+
+LST works with any endpoint that speaks the OpenAI-compatible chat-completions protocol. Only `LLM_BASE_URL`, `LLM_MODEL`, and `LLM_API_KEY` change between providers — no code edits. With `LLM_STRUCTURED_MODE=auto` (the default) the client adapts to each provider's structured-output support automatically — for example, GLM Coding's `glm-5.2` needs JSON Schema, which `auto` selects.
+
+| Provider | `LLM_BASE_URL` | Example model |
+| --- | --- | --- |
+| Ollama Cloud (default) | `https://ollama.com/v1` | `gpt-oss:20b` |
+| GLM Coding (Z.ai) | `https://api.z.ai/api/coding/paas/v4` | `glm-5.2` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4o-mini` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
 
 A template `.env.example` ships with the repository; copy it to `.env` and fill in the blanks.
 
@@ -190,7 +205,7 @@ This section addresses the laboratory ebook requirement in section 4.3.1.
 - Event-header truncation defaulted to 80 characters (a VT100-era width) and cut `POSSIBLE BREAK-IN ATTEMPT!` mid-phrase in the report. A smoke test against real Ollama Cloud output surfaced the bug; the limit was raised to 120 in phase 7.2.
 - LLM responses truncated mid-sentence in phase 7.1 because `max_tokens` was not set; the model inherited a conservative default. Fixed by exposing `LLM_MAX_TOKENS` as a configuration knob.
 
-**Why the result is maintainable despite AI involvement.** Every phase followed the same loop: written specification, explicit architectural decisions, implementation, tests that validate behavior rather than implementation details, manual review of each diff. Public naming, pt-BR output strings, and rule semantics were decided by the developer. The test suite (167 tests, 95.99% branch coverage) provides the regression safety net that lets future changes proceed without re-reading every file.
+**Why the result is maintainable despite AI involvement.** Every phase followed the same loop: written specification, explicit architectural decisions, implementation, tests that validate behavior rather than implementation details, manual review of each diff. Public naming, pt-BR output strings, and rule semantics were decided by the developer. The test suite (181 tests, 96% branch coverage) provides the regression safety net that lets future changes proceed without re-reading every file.
 
 ## Development
 
@@ -212,7 +227,7 @@ Released under the [MIT License](LICENSE).
 ## Acknowledgments
 
 - [drain3](https://github.com/IBM/Drain3) — log template mining, originally from the LogPAI group at IBM Research.
-- [Ollama](https://ollama.com) — hosted inference endpoint used by the Explainer stage.
+- [Ollama](https://ollama.com) — the default hosted inference endpoint for the Explainer stage; any OpenAI-compatible provider works.
 - **Laboratório Introdutório: Construindo um Miniprojeto com Inteligência Artificial Generativa** (AKCIT / UFG, 2026) — the course context under which this project was developed.
 
 ---
@@ -251,7 +266,7 @@ O resultado é um relatório em Markdown que um analista revisa em minutos, não
   [3] Detector baseado em regras
         |  regras determinísticas -> dezenas de eventos marcados
         v
-  [4] Explainer (LLM)  <-- Ollama Cloud (HTTPS, compatível com OpenAI)
+  [4] Explainer (LLM)  <-- Provedor LLM (HTTPS, compatível com OpenAI)
         |  JSON: explicação, severidade, próxima ação (pt-BR)
         v
   [5] Reporter
@@ -265,7 +280,7 @@ Cada estágio é isolado por trás de um schema Pydantic; os estágios se comuni
 1. **Parser + Template Miner** lê o log linha a linha por streaming e executa o [drain3](https://github.com/IBM/Drain3) para agrupar linhas sintaticamente similares em templates.
 2. **Aggregator** calcula estatísticas por template: total de ocorrências, taxa média e de pico, cardinalidades de IPs e usuários, amostras de IPs.
 3. **Detector** executa um registro de regras (um arquivo por regra). Cada regra pontua cada template; o motor deduplica por `(score, priority)` e emite os eventos marcados.
-4. **Explainer** envia os eventos marcados ao LLM e analisa a resposta JSON estrita em objetos `ExplainedEvent`. O cliente faz fallback sem `response_format=json_object` quando o modelo rejeita o modo estruturado.
+4. **Explainer** envia os eventos marcados ao LLM e analisa a resposta JSON estrita em objetos `ExplainedEvent`. O structured output é negociado por uma cascata — JSON Schema estrito primeiro, depois `json_object`, depois texto livre — degradando só quando o provedor rejeita um formato; uma resposta vazia ou inválida é re-solicitada antes de o evento ser posto de lado.
 5. **Reporter** produz o documento Markdown: eventos ordenados por severidade, tabelas de métricas por evento, referências de regras e um apêndice listando cada regra de detecção ativa.
 
 ## Princípios de projeto
@@ -296,10 +311,10 @@ Scan em modo dry-run (pula o LLM, dispensa API key):
 lst scan /var/log/auth.log --dry-run
 ```
 
-Scan completo (exige `OLLAMA_API_KEY` no ambiente ou em um `.env` local; ver [Configuração](#configuração)):
+Scan completo (exige `LLM_API_KEY` no ambiente ou em um `.env` local; ver [Configuração](#configuração)):
 
 ```bash
-cp .env.example .env   # em seguida, editar .env e definir OLLAMA_API_KEY
+cp .env.example .env   # em seguida, editar .env e definir LLM_API_KEY
 lst scan /var/log/auth.log -o report.md
 ```
 
@@ -348,13 +363,13 @@ Bloquear os IPs identificados e analisar logs de sessão anterior para
 detecção de possíveis brechas.
 ```
 
-O bloco de distribuição com emojis, as linhas de amostra e o apêndice por regra foram omitidos neste trecho.
+O bloco de distribuição com emojis, as linhas de amostra e o apêndice por regra foram omitidos neste trecho. Quando o LLM não consegue explicar um evento marcado (mesmo após `LLM_PARSE_RETRIES`), o relatório termina com um rodapé **"Eventos não explicados"** que lista esses eventos, para que lacunas de cobertura nunca fiquem silenciosas.
 
 ## Arquitetura
 
 O LST é um pipeline de 5 estágios. Os dados fluem em sentido único; cada estágio depende apenas do schema de saída do estágio anterior. O LLM vive no estágio 4 e em nenhum outro lugar: *a detecção é determinística, a explicação é estocástica*. Essa separação é o que torna a ferramenta auditável.
 
-Consultar [docs/architecture.md](docs/architecture.md) para o diagrama Mermaid com o pipeline completo, as dependências externas (Ollama Cloud, `.env`) e os volumes esperados em cada estágio.
+Consultar [docs/architecture.md](docs/architecture.md) para o diagrama Mermaid com o pipeline completo, as dependências externas (o provedor LLM, `.env`) e os volumes esperados em cada estágio.
 
 O ponto de entrada é `lst.pipeline.run_pipeline`, uma coroutine async que costura os cinco estágios. A CLI em `src/lst/cli.py` é deliberadamente enxuta — trata flags, constrói `Settings` e mapeia exceções conhecidas para mensagens de erro em pt-BR com códigos de saída não-zero.
 
@@ -364,12 +379,27 @@ A configuração é lida do ambiente ou de um `.env` local (carregado automatica
 
 | Variável | Padrão | Faixa | Descrição |
 | --- | --- | --- | --- |
-| `OLLAMA_API_KEY` | *(obrigatório)* | string não-vazia | Token de autenticação do Ollama Cloud. A inicialização falha se não estiver definido, exceto quando `--dry-run` é usado. |
-| `OLLAMA_MODEL` | `gpt-oss:20b` | string não-vazia | Identificador do modelo disponível no plano Ollama Cloud do usuário. |
-| `OLLAMA_BASE_URL` | `https://ollama.com/v1` | string não-vazia | URL base da API de chat-completions compatível com OpenAI. Alterar apenas ao apontar para um proxy self-hosted. |
+| `LLM_API_KEY` | *(obrigatório)* | string não-vazia | Token de autenticação do provedor LLM. A inicialização falha se não estiver definido, exceto quando `--dry-run` é usado. |
+| `LLM_MODEL` | `gpt-oss:20b` | string não-vazia | Identificador do modelo entendido pelo provedor configurado (ex.: `glm-5.2` no GLM Coding). |
+| `LLM_BASE_URL` | `https://ollama.com/v1` | string não-vazia | URL base da API de chat-completions compatível com OpenAI. Aponte para qualquer provedor compatível. |
+| `LLM_STRUCTURED_MODE` | `auto` | `auto` / `json_schema` / `json_object` / `none` | Estratégia de structured output. `auto` tenta JSON Schema estrito, depois `json_object`, depois texto livre, degradando só quando o provedor rejeita um formato. |
+| `LLM_PARSE_RETRIES` | `1` | `[0, 3]` | Tentativas extras de re-requisição quando o provedor devolve resposta vazia ou inválida com 200 OK. |
 | `LLM_TIMEOUT_SECONDS` | `60.0` | `[1.0, 300.0]` | Timeout wall-clock de uma única chamada ao LLM, em segundos. |
-| `LLM_MAX_RETRIES` | `2` | `[0, 5]` | Orçamento de retry automático para falhas transitórias (HTTP 5xx, rate-limit). |
+| `LLM_MAX_RETRIES` | `2` | `[0, 5]` | Orçamento de retry automático para falhas HTTP transitórias (5xx, rate-limit). |
 | `LLM_MAX_TOKENS` | `1024` | `[64, 4096]` | Teto de tokens que o LLM pode emitir por resposta. O padrão dá margem para explicações em português de múltiplas frases sem truncamento. |
+
+> **Retrocompatibilidade:** os nomes legados `OLLAMA_API_KEY`, `OLLAMA_MODEL` e `OLLAMA_BASE_URL` continuam funcionando como aliases das três variáveis `LLM_*` acima, então um `.env` da v1.0.0 segue carregando sem alteração.
+
+### Suporte a provedores
+
+O LST funciona com qualquer endpoint que fale o protocolo de chat-completions compatível com OpenAI. Só `LLM_BASE_URL`, `LLM_MODEL` e `LLM_API_KEY` mudam entre provedores — sem editar código. Com `LLM_STRUCTURED_MODE=auto` (o padrão), o cliente se adapta automaticamente ao suporte de structured output de cada provedor — por exemplo, o `glm-5.2` do GLM Coding precisa de JSON Schema, que o `auto` seleciona.
+
+| Provedor | `LLM_BASE_URL` | Modelo de exemplo |
+| --- | --- | --- |
+| Ollama Cloud (padrão) | `https://ollama.com/v1` | `gpt-oss:20b` |
+| GLM Coding (Z.ai) | `https://api.z.ai/api/coding/paas/v4` | `glm-5.2` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `openai/gpt-4o-mini` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
 
 Um template `.env.example` acompanha o repositório; basta copiá-lo para `.env` e preencher os valores.
 
@@ -413,7 +443,7 @@ Esta seção atende ao requisito da seção 4.3.1 do ebook do laboratório.
 - O truncamento de cabeçalho de evento ficou inicialmente em 80 caracteres (herança da largura VT100) e cortava `POSSIBLE BREAK-IN ATTEMPT!` no meio do relatório. Um smoke test contra a saída real do Ollama Cloud revelou o bug; o limite foi elevado para 120 na fase 7.2.
 - As respostas do LLM foram truncadas no meio da frase na fase 7.1 porque `max_tokens` não estava definido; o modelo herdava um padrão conservador. Corrigido expondo `LLM_MAX_TOKENS` como knob de configuração.
 
-**Por que o resultado é mantível apesar do envolvimento da IA.** Cada fase seguiu o mesmo loop: especificação escrita, decisões arquiteturais explícitas, implementação, testes que validam comportamento (e não detalhes de implementação) e revisão manual de cada diff. Nomes públicos, strings de saída em pt-BR e a semântica das regras foram decididos pelo desenvolvedor. A suíte de testes (167 testes, 95,99% de cobertura de branches) fornece a rede de segurança que permite mudanças futuras sem reler cada arquivo.
+**Por que o resultado é mantível apesar do envolvimento da IA.** Cada fase seguiu o mesmo loop: especificação escrita, decisões arquiteturais explícitas, implementação, testes que validam comportamento (e não detalhes de implementação) e revisão manual de cada diff. Nomes públicos, strings de saída em pt-BR e a semântica das regras foram decididos pelo desenvolvedor. A suíte de testes (181 testes, 96% de cobertura de branches) fornece a rede de segurança que permite mudanças futuras sem reler cada arquivo.
 
 ## Desenvolvimento
 
@@ -435,7 +465,7 @@ Distribuído sob a [Licença MIT](LICENSE).
 ## Agradecimentos
 
 - [drain3](https://github.com/IBM/Drain3) — template mining de logs, originalmente do grupo LogPAI na IBM Research.
-- [Ollama](https://ollama.com) — endpoint de inferência hospedado usado pelo estágio Explainer.
+- [Ollama](https://ollama.com) — endpoint de inferência hospedado padrão do estágio Explainer; qualquer provedor compatível com OpenAI funciona.
 - **Laboratório Introdutório: Construindo um Miniprojeto com Inteligência Artificial Generativa** (AKCIT / UFG, 2026) — contexto do curso no qual este projeto foi desenvolvido.
 
 </details>
