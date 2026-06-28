@@ -71,9 +71,10 @@ async def run_pipeline(
     Args:
         log_path: Path to the log file to analyse. Must exist and be a
             regular file.
-        settings: Runtime configuration. Used for the LLM model name and,
-            when ``client`` is ``None`` and ``dry_run`` is ``False``, to
-            construct the default :class:`OpenAICompatClient`.
+        settings: Runtime configuration. Provides the LLM model name and
+            the parse-retry budget and, when ``client`` is ``None`` and
+            ``dry_run`` is ``False``, constructs the default
+            :class:`OpenAICompatClient`.
         client: Optional pre-built :class:`LLMClient`. Tests inject a
             fake here; production callers leave it ``None``.
         dry_run: When ``True``, the Explainer stage is replaced by a
@@ -83,7 +84,8 @@ async def run_pipeline(
 
     Returns:
         The rendered Markdown report, ready to be written to stdout or a
-        file.
+        file. Flagged events the LLM could not explain after retries are
+        listed in a footer rather than dropped silently.
 
     Raises:
         FileNotFoundError: if ``log_path`` does not point at a regular
@@ -121,27 +123,37 @@ async def run_pipeline(
     flagged = detect(aggregated)
     logger.info("Stage 4 (Detector) complete: %d flagged events", len(flagged))
 
+    explained: list[ExplainedEvent]
+    discarded: list[FlaggedEvent]
     if dry_run:
         explained = _dry_run_explain(flagged)
+        discarded = []
         logger.info("Stage 5 (Explainer) skipped (dry-run): %d placeholders", len(explained))
     else:
         active_client = client if client is not None else OpenAICompatClient(settings)
-        explained = await explain(
+        explained, discarded = await explain(
             flagged,
             active_client,
             model=settings.llm_model,
+            parse_retries=settings.llm_parse_retries,
         )
-        logger.info("Stage 5 (Explainer) complete: %d explained events", len(explained))
+        logger.info(
+            "Stage 5 (Explainer) complete: %d explained, %d discarded",
+            len(explained),
+            len(discarded),
+        )
 
     markdown = render(
         explained,
         source_path=log_path,
         generated_at=datetime.now(UTC),
+        discarded=discarded,
     )
     logger.info(
-        "Pipeline complete: %d flagged, %d explained",
+        "Pipeline complete: %d flagged, %d explained, %d discarded",
         len(flagged),
         len(explained),
+        len(discarded),
     )
     return markdown
 

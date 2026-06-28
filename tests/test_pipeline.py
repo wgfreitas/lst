@@ -137,3 +137,14 @@ async def test_pipeline_logs_each_stage(caplog: pytest.LogCaptureFixture) -> Non
     assert "Stage 4" in messages
     assert "Stage 5" in messages
     assert "Pipeline complete" in messages
+
+
+async def test_pipeline_surfaces_discarded_events_in_report() -> None:
+    """Events the LLM can never explain land in the report's discarded footer."""
+    # Junk on every call: with parse_retries the engine exhausts retries and
+    # discards each flagged event instead of dropping it silently.
+    fake = FakeLLMClient(["not valid json"] * 20)
+    markdown = await run_pipeline(_FIXTURE, _settings(), client=fake)
+    assert "## Eventos não explicados" in markdown
+    assert "investigação manual" in markdown
+    assert "Nenhum evento suspeito" not in markdown

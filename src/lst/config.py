@@ -34,6 +34,8 @@ Design rules enforced here:
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -64,6 +66,13 @@ class Settings(BaseSettings):
         llm_max_tokens: Hard cap on tokens the LLM may emit per response.
             Bounded to ``[64, 4096]``; the default ``1024`` leaves room
             for multi-sentence pt-BR explanations without truncation.
+        llm_structured_mode: Structured-output strategy -- ``auto`` tries
+            json_schema, then json_object, then free text; pin it to
+            ``json_schema`` / ``json_object`` / ``none`` for a known
+            provider.
+        llm_parse_retries: Extra attempts to re-request and parse when the
+            model returns an empty or unparseable 200 OK reply. Bounded to
+            ``[0, 3]``.
 
     Example:
         >>> from lst.config import Settings
@@ -117,5 +126,23 @@ class Settings(BaseSettings):
         description=(
             "Maximum tokens the LLM may emit in a single response. Generous "
             "default ensures multi-sentence pt-BR explanations aren't truncated."
+        ),
+    )
+    llm_structured_mode: Literal["auto", "json_schema", "json_object", "none"] = Field(
+        default="auto",
+        description=(
+            "Structured-output strategy. 'auto' tries json_schema, then "
+            "json_object, then free text. Set explicitly to pin behavior "
+            "for a known provider."
+        ),
+    )
+    llm_parse_retries: int = Field(
+        default=1,
+        ge=0,
+        le=3,
+        description=(
+            "Extra attempts to re-request and parse when the LLM returns "
+            "an empty or unparseable response. The openai library already "
+            "retries HTTP errors; this covers 200-OK-but-malformed replies."
         ),
     )

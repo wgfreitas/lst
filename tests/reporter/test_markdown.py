@@ -343,3 +343,72 @@ def test_render_event_numbers_are_sequential(
     assert "## 2." in out
     assert "## 3." in out
     assert "## 4." not in out
+
+
+def test_render_lists_discarded_events_in_footer(
+    make_explained: Callable[..., ExplainedEvent],
+) -> None:
+    """Non-empty ``discarded`` adds a footer table with cluster, category, rule, score."""
+    explained = make_explained(cluster_id=1, severity=Severity.HIGH)
+    discarded = [
+        make_explained(
+            cluster_id=5,
+            category=FlagCategory.HIGH_RISK_PATTERN,
+            rule_name="high_risk_keyword_match",
+            score=0.9,
+        ).flagged
+    ]
+    out = render(
+        [explained],
+        source_path=_SOURCE_PATH,
+        generated_at=_GENERATED_AT,
+        discarded=discarded,
+    )
+    assert "## Eventos não explicados" in out
+    assert "investigação manual" in out
+    assert "| 5 | Padrão de alto risco | `high_risk_keyword_match` | 0.90 |" in out
+
+
+def test_render_omits_discarded_section_when_none(
+    make_explained: Callable[..., ExplainedEvent],
+) -> None:
+    """Default ``discarded=None`` keeps the report clean (no footer)."""
+    out = render([make_explained()], source_path=_SOURCE_PATH, generated_at=_GENERATED_AT)
+    assert "Eventos não explicados" not in out
+
+
+def test_render_omits_discarded_section_when_empty(
+    make_explained: Callable[..., ExplainedEvent],
+) -> None:
+    """An explicit empty ``discarded`` list also omits the footer."""
+    out = render(
+        [make_explained()],
+        source_path=_SOURCE_PATH,
+        generated_at=_GENERATED_AT,
+        discarded=[],
+    )
+    assert "Eventos não explicados" not in out
+
+
+def test_render_discarded_footer_shown_when_all_events_discarded(
+    make_explained: Callable[..., ExplainedEvent],
+) -> None:
+    """No explained events but some discarded -> footer shown, not 'nada suspeito'."""
+    discarded = [
+        make_explained(
+            cluster_id=7,
+            category=FlagCategory.SPIKE,
+            rule_name="spike_zscore",
+            score=0.75,
+        ).flagged
+    ]
+    out = render(
+        [],
+        source_path=_SOURCE_PATH,
+        generated_at=_GENERATED_AT,
+        discarded=discarded,
+    )
+    assert "## Eventos não explicados" in out
+    assert "| 7 | Pico de taxa | `spike_zscore` | 0.75 |" in out
+    assert "Nenhum evento suspeito" not in out
+    assert "Apêndice" in out

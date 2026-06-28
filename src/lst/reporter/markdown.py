@@ -40,7 +40,7 @@ from pathlib import Path
 
 from lst.detector.rules import ACTIVE_RULES
 from lst.detector.rules.base import Rule
-from lst.schemas import ExplainedEvent, FlagCategory, Severity
+from lst.schemas import ExplainedEvent, FlagCategory, FlaggedEvent, Severity
 
 _SEVERITY_LABEL_PT: dict[Severity, str] = {
     Severity.CRITICAL: "Crítico",
@@ -95,6 +95,7 @@ def render(
     *,
     source_path: Path | str,
     generated_at: datetime,
+    discarded: list[FlaggedEvent] | None = None,
 ) -> str:
     """Render the final pt-BR Markdown report.
 
@@ -106,14 +107,24 @@ def render(
             analysed. Only used as text in the header; no I/O happens.
         generated_at: UTC timestamp stamped into the header so the
             report is self-describing.
+        discarded: Flagged events the Explainer could not analyse after
+            its retries. When non-empty they are listed in an honest
+            "Eventos não explicados" footer so the analyst never assumes
+            full coverage. ``None`` or empty omits the footer.
 
     Returns:
         A single Markdown string. The return value is the full report;
         callers decide whether to print it, write it to disk, or attach
         it to a ticket.
     """
+    discarded_events = discarded or []
+
     if not events:
-        return _render_empty_report(source_path=source_path, generated_at=generated_at)
+        return _render_empty_report(
+            source_path=source_path,
+            generated_at=generated_at,
+            discarded=discarded_events,
+        )
 
     ordered = sorted(
         events,
@@ -129,17 +140,34 @@ def render(
         ),
         _render_summary_block(ordered),
         _render_events_block(ordered),
-        _render_rules_appendix(ACTIVE_RULES),
     ]
+    if discarded_events:
+        sections.append(_render_discarded_block(discarded_events))
+    sections.append(_render_rules_appendix(ACTIVE_RULES))
     return "\n\n".join(sections) + "\n"
 
 
-def _render_empty_report(*, source_path: Path | str, generated_at: datetime) -> str:
-    """Short placeholder when the pipeline produced no explained events."""
+def _render_empty_report(
+    *,
+    source_path: Path | str,
+    generated_at: datetime,
+    discarded: list[FlaggedEvent],
+) -> str:
+    """Report body when no event was explained.
+
+    Two sub-cases: a genuinely quiet window (no flags at all) gets the
+    "nothing found" placeholder; a window where every flagged event was
+    discarded gets the discarded footer instead, so the report never
+    claims "nada suspeito" when the Detector actually fired.
+    """
     header = _render_header(source_path=source_path, generated_at=generated_at, total=0)
-    placeholder = "## Resumo\n\nNenhum evento suspeito foi identificado na janela analisada."
-    appendix = _render_rules_appendix(ACTIVE_RULES)
-    return "\n\n".join([header, placeholder, appendix]) + "\n"
+    sections = [header]
+    if discarded:
+        sections.append(_render_discarded_block(discarded))
+    else:
+        sections.append("## Resumo\n\nNenhum evento suspeito foi identificado na janela analisada.")
+    sections.append(_render_rules_appendix(ACTIVE_RULES))
+    return "\n\n".join(sections) + "\n"
 
 
 def _render_header(
@@ -248,6 +276,29 @@ def _render_rules_appendix(rules: Iterable[Rule]) -> str:
     lines = ["## Apêndice: regras de detecção ativas", ""]
     for rule in rules:
         lines.append(f"- **`{rule.name}`** ({rule.category.value}) — {rule.description_pt}")
+    return "\n".join(lines)
+
+
+def _render_discarded_block(discarded: list[FlaggedEvent]) -> str:
+    """Honest footer listing flagged events the LLM could not explain."""
+    lines = [
+        "## Eventos não explicados",
+        "",
+        (
+            "Os seguintes eventos foram detectados mas não puderam ser explicados "
+            "pelo LLM (resposta inválida após as tentativas configuradas). "
+            "Recomenda-se investigação manual."
+        ),
+        "",
+        "| Cluster | Categoria | Regra | Score |",
+        "| --- | --- | --- | --- |",
+    ]
+    for event in discarded:
+        category = _CATEGORY_LABEL_PT[event.category]
+        lines.append(
+            f"| {event.aggregated.template.cluster_id} | {category} "
+            f"| `{event.rule_name}` | {event.score:.2f} |"
+        )
     return "\n".join(lines)
 
 
