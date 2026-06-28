@@ -46,6 +46,7 @@ def test_cli_scan_dry_run_to_stdout(
     tmp_path: Path,
 ) -> None:
     """Dry-run scan streams the Markdown report to stdout (no API key needed)."""
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
     monkeypatch.chdir(tmp_path)  # avoid picking up a developer .env
     result = runner.invoke(app, ["scan", str(_FIXTURE), "--dry-run"])
@@ -60,6 +61,7 @@ def test_cli_scan_dry_run_to_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``-o`` writes the Markdown to a file and keeps stdout quiet."""
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
     monkeypatch.chdir(tmp_path)
     out_path = tmp_path / "report.md"
@@ -80,11 +82,12 @@ def test_cli_scan_without_api_key(
     tmp_path: Path,
 ) -> None:
     """A missing API key outside of dry-run is a clear, exit-1 failure."""
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
     monkeypatch.chdir(tmp_path)  # prevents picking up a developer .env
     result = runner.invoke(app, ["scan", str(_FIXTURE)])
     assert result.exit_code == 1
-    assert "OLLAMA_API_KEY" in result.stderr
+    assert "LLM_API_KEY" in result.stderr
     assert "não configurada" in result.stderr
 
 

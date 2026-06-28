@@ -45,8 +45,8 @@ def _settings() -> Settings:
     """Return a :class:`Settings` that ignores any local ``.env`` file."""
     return Settings(
         _env_file=None,  # type: ignore[call-arg]
-        ollama_api_key="test-api-key",
-        ollama_model="test-model",
+        llm_api_key="test-api-key",
+        llm_model="test-model",
     )
 
 
@@ -97,8 +97,8 @@ async def test_pipeline_dry_run() -> None:
     """Dry-run skips the LLM, emits placeholders, and never needs an API key."""
     settings = Settings(
         _env_file=None,  # type: ignore[call-arg]
-        ollama_api_key="irrelevant-in-dry-run",
-        ollama_model="test-model",
+        llm_api_key="irrelevant-in-dry-run",
+        llm_model="test-model",
     )
     markdown = await run_pipeline(_FIXTURE, settings, dry_run=True)
 

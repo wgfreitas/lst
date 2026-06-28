@@ -1,10 +1,13 @@
-"""Async HTTP client for the Ollama Cloud chat-completions endpoint.
+"""Async HTTP client for OpenAI-compatible chat-completions endpoints.
 
-The Explainer talks to Ollama Cloud through the OpenAI-compatible REST
-API, reusing the official ``openai`` SDK. Going through the SDK buys
+The Explainer talks to its LLM provider through the OpenAI-compatible
+REST API, reusing the official ``openai`` SDK. Going through the SDK buys
 us retries with exponential back-off, HTTP error taxonomy, and the
-(still-moving) authentication flow -- all of which would be tedious
-and error-prone to reproduce with raw :mod:`httpx` calls.
+(still-moving) authentication flow -- all of which would be tedious and
+error-prone to reproduce with raw :mod:`httpx` calls. Any provider that
+exposes an OpenAI-compatible ``/chat/completions`` endpoint works without
+code changes -- Ollama Cloud (the default), GLM (Z.ai), OpenRouter, or
+OpenAI itself -- since only the base URL, API key, and model name differ.
 
 Two layers live here:
 
@@ -12,8 +15,8 @@ Two layers live here:
   depends on. Describing the contract independently of the concrete
   class is what lets the engine tests inject a fake client without
   touching :mod:`respx` or HTTP machinery.
-* :class:`OllamaClient` -- the production implementation. It pins
-  :class:`AsyncOpenAI` to the Ollama Cloud base URL, falls back to a
+* :class:`OpenAICompatClient` -- the production implementation. It pins
+  :class:`AsyncOpenAI` to the configured base URL, falls back to a
   JSON-mode-less retry when the model rejects
   ``response_format=json_object``, and measures wall-clock latency
   with :func:`time.monotonic` so the :class:`ExplainedEvent`'s
@@ -73,20 +76,23 @@ class LLMClient(Protocol):
         ...
 
 
-class OllamaClient:
+class OpenAICompatClient:
     """Concrete :class:`LLMClient` backed by ``openai.AsyncOpenAI``.
 
     The underlying :class:`AsyncOpenAI` instance is created once per
-    :class:`OllamaClient` and reused across requests -- the SDK keeps a
-    pooled :class:`httpx.AsyncClient` internally, so each ``complete``
-    call is a single HTTP round-trip, not a fresh connection.
+    :class:`OpenAICompatClient` and reused across requests -- the SDK
+    keeps a pooled :class:`httpx.AsyncClient` internally, so each
+    ``complete`` call is a single HTTP round-trip, not a fresh
+    connection. The base URL, API key, and retry budget all come from
+    :class:`Settings`, so pointing at a different OpenAI-compatible
+    provider is purely a configuration change.
     """
 
     def __init__(self, settings: Settings) -> None:
         """Initialise the client from a :class:`Settings` snapshot."""
         self._client = AsyncOpenAI(
-            base_url=settings.ollama_base_url,
-            api_key=settings.ollama_api_key,
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
             max_retries=settings.llm_max_retries,
         )
         self._default_timeout = settings.llm_timeout_seconds

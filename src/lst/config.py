@@ -6,16 +6,27 @@ single ``BaseSettings`` class keeps the contract explicit: the CLI builds
 one :class:`Settings` instance, hands it to the Explainer, and reads
 each knob from a well-documented field.
 
+The Explainer speaks the OpenAI-compatible chat-completions protocol, so
+LST is not tied to any single provider: Ollama Cloud (the default), GLM
+(Z.ai), OpenRouter, or OpenAI itself all work by changing only
+:attr:`Settings.llm_base_url`, :attr:`Settings.llm_model`, and
+:attr:`Settings.llm_api_key` -- no code change required.
+
 Design rules enforced here:
 
-* Fail loud on missing credentials -- :attr:`Settings.ollama_api_key`
-  has no default, so ``Settings()`` raises a
-  :class:`pydantic.ValidationError` at startup if ``OLLAMA_API_KEY`` is
-  not exported (or present in ``.env``). A silent ``""`` key would
-  surface as an opaque 401 from Ollama Cloud half-way through a run.
-* Case-insensitive env names -- both ``OLLAMA_API_KEY`` and
-  ``ollama_api_key`` resolve to the same field, which is friendlier to
-  shells that lowercase their environment.
+* Fail loud on missing credentials -- :attr:`Settings.llm_api_key` has
+  no default, so ``Settings()`` raises a
+  :class:`pydantic.ValidationError` at startup when neither ``LLM_API_KEY``
+  nor the legacy ``OLLAMA_API_KEY`` is exported (or present in ``.env``).
+  A silent ``""`` key would surface as an opaque 401 from the provider
+  half-way through a run.
+* Backward-compatible env names -- the three provider fields were named
+  ``OLLAMA_*`` in v1.0.0 and are ``LLM_*`` now. Each one accepts both
+  spellings through :class:`pydantic.AliasChoices`, so a v1.0.0 ``.env``
+  keeps loading unchanged. ``case_sensitive=False`` makes the match
+  case-insensitive (``LLM_API_KEY`` and ``llm_api_key`` are equivalent),
+  and ``populate_by_name=True`` keeps the field names usable as direct
+  keyword arguments alongside their aliases.
 * Narrow numeric bounds -- ``llm_timeout_seconds`` and
   ``llm_max_retries`` have tight ``ge``/``le`` guards so a typo
   (``60000`` seconds instead of ``60``) is rejected at load time.
@@ -23,26 +34,29 @@ Design rules enforced here:
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Environment-backed configuration for the CLI.
 
-    Fields map to environment variables of the same name (case-insensitive)
-    and can also be supplied through a local ``.env`` file -- the CLI
-    entry point loads the file automatically via
-    :class:`SettingsConfigDict`.
+    Fields map to environment variables (case-insensitive) and can also
+    be supplied through a local ``.env`` file -- the CLI entry point
+    loads the file automatically via :class:`SettingsConfigDict`. The
+    three provider fields each accept their legacy ``OLLAMA_*`` name as
+    an alias, so a v1.0.0 ``.env`` keeps working untouched.
 
     Attributes:
-        ollama_api_key: Bearer token for Ollama Cloud. Required; no
+        llm_api_key: Bearer token for the LLM provider. Required; no
             default -- an unset key is a startup error, not a runtime
-            surprise.
-        ollama_model: Model identifier available on the caller's Ollama
-            Cloud plan (e.g. ``gpt-oss:20b``, ``gpt-oss:120b``).
-        ollama_base_url: OpenAI-compatible chat-completions base URL.
-            Override only when pointing at a self-hosted proxy.
+            surprise. Legacy env alias: ``OLLAMA_API_KEY``.
+        llm_model: Model identifier understood by the configured provider
+            (e.g. ``gpt-oss:20b`` on Ollama Cloud, ``glm-5.2`` on GLM).
+            Legacy env alias: ``OLLAMA_MODEL``.
+        llm_base_url: OpenAI-compatible chat-completions base URL.
+            Defaults to Ollama Cloud; point it at any compatible
+            provider. Legacy env alias: ``OLLAMA_BASE_URL``.
         llm_timeout_seconds: Per-request wall-clock budget handed to the
             HTTP client. Bounded to ``[1.0, 300.0]``.
         llm_max_retries: Automatic retry budget for transient failures
@@ -54,7 +68,7 @@ class Settings(BaseSettings):
     Example:
         >>> from lst.config import Settings
         >>> settings = Settings()  # loads from environment + .env
-        >>> settings.ollama_model
+        >>> settings.llm_model
         'gpt-oss:20b'
     """
 
@@ -62,22 +76,26 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        populate_by_name=True,
         extra="ignore",
     )
 
-    ollama_api_key: str = Field(
+    llm_api_key: str = Field(
         ...,
         min_length=1,
-        description="Bearer token for Ollama Cloud (required).",
+        validation_alias=AliasChoices("LLM_API_KEY", "OLLAMA_API_KEY"),
+        description="Bearer token for the LLM provider (required).",
     )
-    ollama_model: str = Field(
+    llm_model: str = Field(
         default="gpt-oss:20b",
         min_length=1,
-        description="Model identifier available on your Ollama Cloud plan.",
+        validation_alias=AliasChoices("LLM_MODEL", "OLLAMA_MODEL"),
+        description="Model identifier understood by the configured LLM provider.",
     )
-    ollama_base_url: str = Field(
+    llm_base_url: str = Field(
         default="https://ollama.com/v1",
         min_length=1,
+        validation_alias=AliasChoices("LLM_BASE_URL", "OLLAMA_BASE_URL"),
         description="OpenAI-compatible chat-completions base URL.",
     )
     llm_timeout_seconds: float = Field(

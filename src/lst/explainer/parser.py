@@ -1,7 +1,7 @@
 """Parse the LLM's raw reply into a three-field dict.
 
-Ollama Cloud and OpenAI-compatible endpoints occasionally return JSON
-wrapped in markdown fences, preceded by "Aqui está o JSON:", or
+OpenAI-compatible endpoints (Ollama Cloud, GLM, and others) occasionally
+return JSON wrapped in markdown fences, preceded by "Aqui está o JSON:", or
 otherwise decorated despite the system prompt asking for none. This
 module tolerates those perturbations so the engine can focus on
 orchestration, and turns pathological failures into a loud

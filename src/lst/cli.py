@@ -49,7 +49,7 @@ def _configure_logging(verbose: bool) -> None:
 def _load_settings(*, dry_run: bool) -> Settings:
     """Load :class:`Settings` or raise a friendly :class:`typer.Exit`.
 
-    ``dry_run=True`` injects a throwaway ``OLLAMA_API_KEY`` if one is not
+    ``dry_run=True`` injects a throwaway ``LLM_API_KEY`` if one is not
     configured, because the LLM is not called in that mode. Outside of
     dry-run a missing key is a hard error -- the pipeline would fail
     mid-flight with an opaque 401 otherwise.
@@ -58,9 +58,9 @@ def _load_settings(*, dry_run: bool) -> Settings:
         return Settings()
     except ValidationError as exc:
         if dry_run:
-            return Settings(ollama_api_key="dry-run-placeholder")
+            return Settings(llm_api_key="dry-run-placeholder")
         typer.echo(
-            "Erro: OLLAMA_API_KEY não configurada no .env (ou use --dry-run).",
+            "Erro: LLM_API_KEY não configurada no .env (ou use --dry-run).",
             err=True,
         )
         raise typer.Exit(code=1) from exc
@@ -84,7 +84,7 @@ def scan(
         bool,
         typer.Option(
             "--dry-run",
-            help="Pula o Explainer (LLM) e usa placeholders; dispensa OLLAMA_API_KEY.",
+            help="Pula o Explainer (LLM) e usa placeholders; dispensa LLM_API_KEY.",
         ),
     ] = False,
     verbose: Annotated[
@@ -113,7 +113,7 @@ def scan(
         typer.echo(f"Erro: arquivo não encontrado: {exc.filename}", err=True)
         raise typer.Exit(code=2) from exc
     except AuthenticationError as exc:
-        typer.echo(f"Erro de autenticação no Ollama Cloud: {exc}", err=True)
+        typer.echo(f"Erro de autenticação no provedor LLM: {exc}", err=True)
         raise typer.Exit(code=1) from exc
     except APITimeoutError as exc:
         typer.echo(f"Timeout ao consultar o LLM: {exc}", err=True)

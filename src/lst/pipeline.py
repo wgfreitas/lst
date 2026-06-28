@@ -11,14 +11,15 @@ Policy decisions that *do* live here:
 * **Dry-run mode** -- when ``dry_run=True``, the LLM call is skipped and
   each :class:`FlaggedEvent` is paired with a placeholder
   :class:`ExplainedEvent`. This path never touches the network and never
-  instantiates the :class:`OllamaClient`, so it works without an API
-  key. Rationale: CI smoke tests, local development iterations, and
+  instantiates the :class:`OpenAICompatClient`, so it works without an
+  API key. Rationale: CI smoke tests, local development iterations, and
   analysts who want to validate the deterministic pipeline before
   spending tokens all share the same flow.
 * **Lazy client construction** -- production callers pass
-  ``client=None`` and the orchestrator builds an :class:`OllamaClient`
-  only when it is about to be used. Tests inject a :class:`LLMClient`
-  directly, so they never touch :class:`Settings` for credentials.
+  ``client=None`` and the orchestrator builds an
+  :class:`OpenAICompatClient` only when it is about to be used. Tests
+  inject a :class:`LLMClient` directly, so they never touch
+  :class:`Settings` for credentials.
 * **No I/O on the return path** -- the function returns a Markdown
   string; writing to disk or stdout is the CLI's job. This keeps
   :func:`run_pipeline` trivially reusable from notebooks, web servers,
@@ -34,7 +35,7 @@ from pathlib import Path
 from lst.aggregator import aggregate
 from lst.config import Settings
 from lst.detector import detect
-from lst.explainer.client import LLMClient, OllamaClient
+from lst.explainer.client import LLMClient, OpenAICompatClient
 from lst.explainer.engine import explain
 from lst.parser import iter_log_lines, mine_templates
 from lst.reporter import render
@@ -72,7 +73,7 @@ async def run_pipeline(
             regular file.
         settings: Runtime configuration. Used for the LLM model name and,
             when ``client`` is ``None`` and ``dry_run`` is ``False``, to
-            construct the default :class:`OllamaClient`.
+            construct the default :class:`OpenAICompatClient`.
         client: Optional pre-built :class:`LLMClient`. Tests inject a
             fake here; production callers leave it ``None``.
         dry_run: When ``True``, the Explainer stage is replaced by a
@@ -124,11 +125,11 @@ async def run_pipeline(
         explained = _dry_run_explain(flagged)
         logger.info("Stage 5 (Explainer) skipped (dry-run): %d placeholders", len(explained))
     else:
-        active_client = client if client is not None else OllamaClient(settings)
+        active_client = client if client is not None else OpenAICompatClient(settings)
         explained = await explain(
             flagged,
             active_client,
-            model=settings.ollama_model,
+            model=settings.llm_model,
         )
         logger.info("Stage 5 (Explainer) complete: %d explained events", len(explained))
 

@@ -57,7 +57,7 @@ async def explain(
     Args:
         events: Flagged events produced by the Detector stage.
         client: Any object satisfying :class:`LLMClient`. The production
-            CLI passes :class:`~lst.explainer.client.OllamaClient`;
+            CLI passes :class:`~lst.explainer.client.OpenAICompatClient`;
             tests inject a fake.
         model: Model identifier forwarded verbatim to the client.
         timeout: Per-request wall-clock budget handed to

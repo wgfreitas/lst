@@ -1,8 +1,9 @@
 """LLM Explainer stage: enrich flagged events with pt-BR analysis.
 
 The Detector emits deterministic :class:`FlaggedEvent` records; the
-Explainer asks an LLM (Ollama Cloud via the OpenAI-compatible endpoint)
-to turn each flag into a triage-ready :class:`ExplainedEvent` carrying
+Explainer asks an LLM, reached through an OpenAI-compatible endpoint
+(Ollama Cloud by default), to turn each flag into a triage-ready
+:class:`ExplainedEvent` carrying
 an explanation, a severity, and a next-action recommendation -- all in
 Brazilian Portuguese.
 

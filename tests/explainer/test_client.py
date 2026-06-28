@@ -1,4 +1,4 @@
-"""Unit tests for :class:`lst.explainer.client.OllamaClient`.
+"""Unit tests for :class:`lst.explainer.client.OpenAICompatClient`.
 
 Every test stubs the ``chat.completions.create`` HTTP path via
 :mod:`respx` -- no real network traffic is permitted. The respx route
@@ -16,7 +16,7 @@ import respx
 from openai import APITimeoutError, AuthenticationError
 
 from lst.config import Settings
-from lst.explainer.client import OllamaClient
+from lst.explainer.client import OpenAICompatClient
 
 _ENDPOINT = "https://ollama.com/v1/chat/completions"
 
@@ -45,7 +45,7 @@ async def test_complete_happy_path_returns_content_and_elapsed(
     payload = _chat_response_payload('{"explanation":"ok","severity":"low","next_action":"x"}')
     with respx.mock(assert_all_called=True) as router:
         route = router.post(_ENDPOINT).mock(return_value=httpx.Response(200, json=payload))
-        client = OllamaClient(settings_fixture)
+        client = OpenAICompatClient(settings_fixture)
         content, elapsed = await client.complete(
             "system",
             "user",
@@ -76,7 +76,7 @@ async def test_complete_falls_back_when_json_mode_rejected(
         route = router.post(_ENDPOINT).mock(
             side_effect=[bad_request, httpx.Response(200, json=good_payload)]
         )
-        client = OllamaClient(settings_fixture)
+        client = OpenAICompatClient(settings_fixture)
         content, _ = await client.complete(
             "system",
             "user",
@@ -91,7 +91,7 @@ async def test_complete_propagates_timeout(settings_fixture: Settings) -> None:
     """Transport timeouts bubble up wrapped as :class:`openai.APITimeoutError`."""
     with respx.mock(assert_all_called=True) as router:
         router.post(_ENDPOINT).mock(side_effect=httpx.TimeoutException("slow"))
-        client = OllamaClient(settings_fixture)
+        client = OpenAICompatClient(settings_fixture)
         with pytest.raises(APITimeoutError):
             await client.complete(
                 "system",
@@ -108,7 +108,7 @@ async def test_complete_raises_on_authentication_error(
     body = {"error": {"message": "invalid api key", "type": "authentication_error"}}
     with respx.mock(assert_all_called=True) as router:
         router.post(_ENDPOINT).mock(return_value=httpx.Response(401, json=body))
-        client = OllamaClient(settings_fixture)
+        client = OpenAICompatClient(settings_fixture)
         with pytest.raises(AuthenticationError):
             await client.complete(
                 "system",
@@ -123,7 +123,7 @@ async def test_complete_elapsed_is_int(settings_fixture: Settings) -> None:
     payload = _chat_response_payload('{"explanation":"a","severity":"low","next_action":"b"}')
     with respx.mock(assert_all_called=True) as router:
         router.post(_ENDPOINT).mock(return_value=httpx.Response(200, json=payload))
-        client = OllamaClient(settings_fixture)
+        client = OpenAICompatClient(settings_fixture)
         _, elapsed = await client.complete(
             "system",
             "user",
@@ -141,7 +141,7 @@ async def test_complete_includes_max_tokens_in_payload(
     payload = _chat_response_payload('{"explanation":"a","severity":"low","next_action":"b"}')
     with respx.mock(assert_all_called=True) as router:
         route = router.post(_ENDPOINT).mock(return_value=httpx.Response(200, json=payload))
-        client = OllamaClient(settings_fixture)
+        client = OpenAICompatClient(settings_fixture)
         await client.complete(
             "system",
             "user",
@@ -172,7 +172,7 @@ async def test_complete_fallback_also_includes_max_tokens(
         route = router.post(_ENDPOINT).mock(
             side_effect=[bad_request, httpx.Response(200, json=good_payload)]
         )
-        client = OllamaClient(settings_fixture)
+        client = OpenAICompatClient(settings_fixture)
         await client.complete(
             "system",
             "user",

@@ -118,9 +118,9 @@ def settings_fixture() -> Settings:
     """Return a :class:`Settings` with ``_env_file=None`` to isolate tests."""
     return Settings(
         _env_file=None,  # type: ignore[call-arg]
-        ollama_api_key="test-api-key",
-        ollama_model="test-model",
-        ollama_base_url="https://ollama.com/v1",
+        llm_api_key="test-api-key",
+        llm_model="test-model",
+        llm_base_url="https://ollama.com/v1",
         llm_timeout_seconds=30.0,
         llm_max_retries=0,
         llm_max_tokens=1024,

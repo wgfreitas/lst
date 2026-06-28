@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-19
+
+First stable release: the complete five-stage triage pipeline behind the
+`lst` CLI. Consolidates everything shipped on top of the initial 0.1.0
+scaffold and matches the `v1.0.0` git tag.
+
+### Added
+- **Parser stage** — streaming log reader (`iter_log_lines`) plus drain3
+  template mining (`mine_templates`) with per-line IP and username extraction.
+- **Aggregator stage** — per-template statistics: event counts, rate and
+  peak-rate per minute, unique IP/user cardinalities, and sample IPs/users.
+- **Detector stage** — five deterministic rules over the aggregated templates:
+  brute force (source-IP cardinality), high-risk pattern, novelty, spike, and
+  variety.
+- **Explainer stage** — LLM enrichment over an OpenAI-compatible
+  chat-completions endpoint via the official `openai` SDK, with JSON-mode and an
+  automatic fallback when the model rejects `response_format`, a tolerant
+  response parser, and a pt-BR explanation, severity, and next-action per
+  flagged event.
+- **Reporter stage** — pt-BR Markdown triage report.
+- **CLI** — `lst scan` with `--dry-run` (offline, no API key required),
+  `-o/--output`, and `-v/--verbose`; `lst version`.
+- **Configuration** — `Settings` (pydantic-settings) loaded from the
+  environment or a local `.env`, with fail-loud validation of the API key and
+  bounded numeric knobs.
+
 ## [0.1.0] - 2026-04-18
 
 ### Added
@@ -24,5 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PEP 561 typing marker at `src/lst/py.typed`.
 - Smoke test suite asserting the package imports and version shape.
 
-[Unreleased]: https://github.com/your-org/lst/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-org/lst/releases/tag/v0.1.0
+[Unreleased]: https://github.com/wgfreitas/lst/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/wgfreitas/lst/compare/v0.1.0...v1.0.0
+[0.1.0]: https://github.com/wgfreitas/lst/releases/tag/v0.1.0
