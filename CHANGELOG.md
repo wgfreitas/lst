@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- GitHub Actions CI workflow: runs ruff, mypy, and pytest on every push to
+  main and pull request. Status badge in the README.
+
 ## [1.1.0] - 2026-06-28
 
 ### Added

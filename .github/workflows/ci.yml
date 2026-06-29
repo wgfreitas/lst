@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint, type-check, and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          # The project pins requires-python = ">=3.11,<3.12"; the runner's
+          # default 3.12 would fail `pip install -e .`. Pin 3.11 explicitly.
+          python-version: '3.11'
+          cache: 'pip'
+          # Dependencies are declared in pyproject.toml (no requirements.txt),
+          # so point the pip cache key at it.
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff check)
+        run: ruff check .
+
+      - name: Format check (ruff format)
+        run: ruff format --check .
+
+      - name: Type check (mypy)
+        run: mypy src
+
+      - name: Tests (pytest with coverage)
+        run: pytest

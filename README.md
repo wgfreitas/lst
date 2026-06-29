@@ -2,6 +2,7 @@
 
 > A triage assistant for security logs: reduces gigabytes of raw log data to dozens of explained, prioritized events in Brazilian Portuguese.
 
+[![CI](https://github.com/wgfreitas/lst/actions/workflows/ci.yml/badge.svg)](https://github.com/wgfreitas/lst/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -188,7 +189,6 @@ LST is a small, honest tool. The following limitations are known and tracked:
 - **Stochastic severity.** Severity and next-action text come from the LLM and can vary between runs for the same input. Detection and scoring do not.
 - **Stateless.** Every run is independent. There is no database, no run history, no diff between consecutive scans.
 - **Single log format.** The parser and regex extractors target `auth.log`-style syslog. Structured-JSON ingestion is on the roadmap.
-- **No CI/CD.** Tests are run manually via `make test` or `pytest`. Automated CI is not yet configured.
 
 ## How AI accelerated this project
 
@@ -426,7 +426,6 @@ O LST é uma ferramenta enxuta e transparente sobre suas limitações. As pendê
 - **Severidade estocástica.** A severidade e o texto da próxima ação vêm do LLM e podem variar entre execuções para a mesma entrada. A detecção e o scoring não variam.
 - **Sem persistência.** Cada execução é independente. Não há banco de dados, histórico de runs, nem diff entre scans consecutivos.
 - **Formato único de log.** O parser e os extratores de regex miram syslog no estilo `auth.log`. Ingestão de JSON estruturado está no roadmap.
-- **Sem CI/CD.** Os testes rodam manualmente via `make test` ou `pytest`. A automação de CI ainda não foi configurada.
 
 ## Como a IA acelerou este projeto
 
