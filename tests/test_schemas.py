@@ -189,6 +189,26 @@ def test_aggregated_template_rejects_malformed_ip(log_template: LogTemplate) -> 
         )
 
 
+def test_aggregated_template_accepts_ipv6_sample_ips(log_template: LogTemplate) -> None:
+    """IPv6 literals (including IPv4-mapped) are valid ``sample_ips`` entries.
+
+    The schema accepted IPv6 before the extractor did; this test pins
+    that contract so a future validator tweak cannot regress it, and
+    checks the literals are carried verbatim (no normalisation).
+    """
+    aggregated = AggregatedTemplate(
+        template=log_template,
+        total_count=10,
+        rate_per_minute=1.0,
+        peak_rate_per_minute=2.0,
+        unique_ips=3,
+        unique_users=1,
+        sample_ips=["2001:db8::1", "::ffff:192.0.2.1", "fe80::1"],
+        sample_users=["root"],
+    )
+    assert aggregated.sample_ips == ["2001:db8::1", "::ffff:192.0.2.1", "fe80::1"]
+
+
 # FlaggedEvent ----------------------------------------------------------------
 
 

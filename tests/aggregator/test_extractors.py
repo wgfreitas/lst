@@ -37,6 +37,83 @@ def test_extract_ips_ignores_dotted_decimals_inside_versions() -> None:
     assert extract_ips("running version 1.2.3 on arch") == []
 
 
+# extract_ips: IPv6 -----------------------------------------------------------
+
+
+def test_extract_ips_finds_compressed_ipv6() -> None:
+    """The ``::``-compressed form is extracted."""
+    assert extract_ips("connect from 2001:db8::1 port 22") == ["2001:db8::1"]
+
+
+def test_extract_ips_finds_full_form_ipv6() -> None:
+    """The full eight-group form is extracted verbatim."""
+    line = "addr 2001:0db8:85a3:0000:0000:8a2e:0370:7334 announced"
+    assert extract_ips(line) == ["2001:0db8:85a3:0000:0000:8a2e:0370:7334"]
+
+
+def test_extract_ips_finds_ipv6_loopback() -> None:
+    """The loopback ``::1`` is extracted."""
+    assert extract_ips("connection from ::1 port 22") == ["::1"]
+
+
+def test_extract_ips_finds_link_local_without_zone() -> None:
+    """A link-local address WITHOUT a zone ID is valid and extracted."""
+    assert extract_ips("neighbor fe80::1 is reachable") == ["fe80::1"]
+
+
+def test_extract_ips_returns_ipv4_mapped_as_single_ipv6_token() -> None:
+    """IPv4-mapped comes back as ONE verbatim IPv6 item.
+
+    The embedded dotted quad must not surface as a second, separate
+    IPv4 item, and the token is not normalised (``::ffff:c000:201``).
+    """
+    result = extract_ips("proxy via ::ffff:192.0.2.1 established")
+    assert result == ["::ffff:192.0.2.1"]
+    assert "192.0.2.1" not in result
+
+
+def test_extract_ips_mixed_families_in_order_of_occurrence() -> None:
+    """IPv6 and IPv4 on one line are both returned, in line order."""
+    line = "from 2001:db8::1 and 203.0.113.5"
+    assert extract_ips(line) == ["2001:db8::1", "203.0.113.5"]
+
+
+def test_extract_ips_on_real_ssh_failure_line_with_ipv6() -> None:
+    """A realistic sshd failure line yields exactly the IPv6 source."""
+    line = "Failed password for root from 2001:db8:dead:beef::10 port 22 ssh2"
+    assert extract_ips(line) == ["2001:db8:dead:beef::10"]
+
+
+def test_extract_ips_rejects_syslog_timestamp() -> None:
+    """``10:00:01`` may match syntactically but fails IP validation."""
+    line = "Apr 18 10:00:01 server sshd[1001]: session opened for user admin"
+    assert extract_ips(line) == []
+
+
+def test_extract_ips_discards_zoned_ipv6_entirely() -> None:
+    """A zone-ID'd literal is dropped whole -- never stripped to ``fe80::1``.
+
+    Capturing ``fe80::1`` here would silently fabricate a zone-less
+    address the line never carried; the decision is to discard.
+    """
+    assert extract_ips("input from fe80::1%eth0 port 22") == []
+
+
+def test_extract_ips_rejects_mac_address() -> None:
+    """Six colon-groups without ``::`` are not a valid IPv6 address."""
+    assert extract_ips("link aa:bb:cc:dd:ee:ff detected") == []
+
+
+def test_extract_ips_ignores_cpp_scope_operator() -> None:
+    """``std::string`` in a leaked stack trace produces no candidate."""
+    assert extract_ips("error in std::string constructor") == []
+
+
+def test_extract_ips_still_drops_invalid_ipv4_octets() -> None:
+    """The pre-IPv6 behaviour for bad IPv4 literals is unchanged."""
+    assert extract_ips("probe from 999.999.999.999 dropped") == []
+
+
 # extract_users ---------------------------------------------------------------
 
 

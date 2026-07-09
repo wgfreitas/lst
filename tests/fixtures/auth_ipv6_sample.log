@@ -1,0 +1,20 @@
+Apr 18 10:00:11 server sshd[6001]: Failed password for root from 2001:db8:bad::1 port 22 ssh2
+Apr 18 10:02:05 server sshd[6001]: Failed password for root from 2001:db8:bad::2 port 22 ssh2
+Apr 18 10:04:18 server sshd[6002]: Failed password for root from 2001:db8:bad::3 port 22 ssh2
+Apr 18 10:06:27 server sshd[6002]: Failed password for root from 2001:db8:bad::4 port 22 ssh2
+Apr 18 10:08:33 server sshd[6003]: Failed password for root from 2001:db8:bad::5 port 22 ssh2
+Apr 18 10:10:41 server sshd[6003]: Failed password for root from 2001:db8:bad::6 port 22 ssh2
+Apr 18 10:12:50 server sshd[6004]: Failed password for root from 2001:db8:bad::7 port 22 ssh2
+Apr 18 10:14:58 server sshd[6004]: Failed password for root from 2001:db8:bad::8 port 22 ssh2
+Apr 18 10:17:02 server sshd[6005]: Failed password for root from 2001:db8:bad::9 port 22 ssh2
+Apr 18 10:19:15 server sshd[6005]: Failed password for root from 2001:db8:bad::a port 22 ssh2
+Apr 18 10:21:24 server sshd[6006]: Failed password for root from 2001:db8:bad::b port 22 ssh2
+Apr 18 10:23:36 server sshd[6006]: Failed password for root from 2001:db8:bad::c port 22 ssh2
+Apr 18 11:00:07 server sshd[7001]: Accepted publickey for deploy from 2001:db8:cafe::1 port 22 ssh2
+Apr 18 11:04:12 server sshd[7002]: Accepted publickey for deploy from 2001:db8:cafe::2 port 22 ssh2
+Apr 18 11:08:19 server sshd[7003]: Accepted publickey for deploy from 2001:db8:cafe::3 port 22 ssh2
+Apr 18 11:12:26 server sshd[7004]: Accepted publickey for deploy from 2001:db8:cafe::4 port 22 ssh2
+Apr 18 11:16:31 server sshd[7005]: Accepted publickey for deploy from 2001:db8:cafe::5 port 22 ssh2
+Apr 18 11:20:44 server sshd[7006]: Accepted publickey for deploy from 2001:db8:cafe::6 port 22 ssh2
+Apr 18 11:24:53 server sshd[7007]: Accepted publickey for deploy from 2001:db8:cafe::7 port 22 ssh2
+Apr 18 11:40:02 server sshd[7100]: Connection closed by invalid user ipv6test 2001:db8:feed::99 port 22 [preauth]
