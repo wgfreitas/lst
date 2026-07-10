@@ -12,7 +12,7 @@
   # ---------------------------------------------------------------------------
   [project]
   name = "lst"
-  version = "1.1.0"
+  version = "1.2.0"
   description = "Security log triage CLI that reduces gigabytes of raw logs to dozens of actionable events."
   readme = "README.md"
   requires-python = ">=3.11,<3.12"

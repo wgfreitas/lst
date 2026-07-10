@@ -109,4 +109,4 @@ LLM_TIMEOUT_SECONDS=120
 
 ## Limitações operacionais
 
-Para limitações conhecidas e roadmap, consultar a seção [Limitations and roadmap](../README.md#limitations-and-roadmap) do README. Em resumo: IPv4 apenas, chamadas LLM sequenciais, severidade estocástica.
+Para limitações conhecidas e roadmap, consultar a seção [Limitations and roadmap](../README.md#limitations-and-roadmap) do README. Em resumo: chamadas LLM sequenciais, severidade estocástica.

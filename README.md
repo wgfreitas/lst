@@ -41,7 +41,7 @@ The result is a Markdown report an analyst reviews in minutes, not hours. Detect
 Each stage is isolated behind a Pydantic schema; stages communicate by passing frozen models, not implicit state. See the [Mermaid architecture diagram](docs/architecture.md) for the full picture.
 
 1. **Parser + Template Miner** streams the log line by line and runs [drain3](https://github.com/IBM/Drain3) to cluster syntactically similar lines into templates.
-2. **Aggregator** computes per-template statistics: total occurrences, mean and peak rate, unique IPs and users, sample IPs.
+2. **Aggregator** computes per-template statistics: total occurrences, mean and peak rate, unique IPs (IPv4 and IPv6) and users, sample IPs.
 3. **Detector** runs a registry of rules (one file per rule). Each rule scores each template; the engine dedups by `(score, priority)` and emits the flagged events.
 4. **Explainer** sends flagged events to the LLM and parses a strict JSON response into `ExplainedEvent` objects. Structured output is negotiated through a cascade — strict JSON Schema first, then `json_object`, then plain text — degrading only when the provider rejects a format; an empty or unparseable reply is re-requested before the event is set aside.
 5. **Reporter** renders a Markdown document: severity-ordered events, per-event metrics tables, rule references, and an appendix listing every active detection rule.
@@ -184,7 +184,6 @@ The Portuguese description that ships in every generated report comes from the r
 
 LST is a small, honest tool. The following limitations are known and tracked:
 
-- **IPv4-only.** The IP extractor does not parse IPv6 addresses. IPv6 support is on the roadmap.
 - **Sequential LLM calls.** The Explainer processes flagged events one at a time. Concurrency will land once rate-limit back-off is validated against the target endpoint.
 - **Stochastic severity.** Severity and next-action text come from the LLM and can vary between runs for the same input. Detection and scoring do not.
 - **Stateless.** Every run is independent. There is no database, no run history, no diff between consecutive scans.
@@ -278,7 +277,7 @@ O resultado é um relatório em Markdown que um analista revisa em minutos, não
 Cada estágio é isolado por trás de um schema Pydantic; os estágios se comunicam passando modelos imutáveis, não estado implícito. Consultar o [diagrama Mermaid de arquitetura](docs/architecture.md) para o quadro completo.
 
 1. **Parser + Template Miner** lê o log linha a linha por streaming e executa o [drain3](https://github.com/IBM/Drain3) para agrupar linhas sintaticamente similares em templates.
-2. **Aggregator** calcula estatísticas por template: total de ocorrências, taxa média e de pico, cardinalidades de IPs e usuários, amostras de IPs.
+2. **Aggregator** calcula estatísticas por template: total de ocorrências, taxa média e de pico, cardinalidades de IPs (IPv4 e IPv6) e usuários, amostras de IPs.
 3. **Detector** executa um registro de regras (um arquivo por regra). Cada regra pontua cada template; o motor deduplica por `(score, priority)` e emite os eventos marcados.
 4. **Explainer** envia os eventos marcados ao LLM e analisa a resposta JSON estrita em objetos `ExplainedEvent`. O structured output é negociado por uma cascata — JSON Schema estrito primeiro, depois `json_object`, depois texto livre — degradando só quando o provedor rejeita um formato; uma resposta vazia ou inválida é re-solicitada antes de o evento ser posto de lado.
 5. **Reporter** produz o documento Markdown: eventos ordenados por severidade, tabelas de métricas por evento, referências de regras e um apêndice listando cada regra de detecção ativa.
@@ -421,7 +420,6 @@ A descrição em português que aparece em todo relatório gerado vem do campo `
 
 O LST é uma ferramenta enxuta e transparente sobre suas limitações. As pendências conhecidas e rastreadas:
 
-- **Apenas IPv4.** O extrator de IP não parseia endereços IPv6. Suporte a IPv6 está no roadmap.
 - **Chamadas LLM sequenciais.** O Explainer processa os eventos marcados um de cada vez. A concorrência entra no código depois que o back-off de rate-limit for validado contra o endpoint alvo.
 - **Severidade estocástica.** A severidade e o texto da próxima ação vêm do LLM e podem variar entre execuções para a mesma entrada. A detecção e o scoring não variam.
 - **Sem persistência.** Cada execução é independente. Não há banco de dados, histórico de runs, nem diff entre scans consecutivos.

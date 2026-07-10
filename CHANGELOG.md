@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-09
+
 ### Added
+- IPv6 support in IP extraction: full form, compressed (`::`), loopback,
+  link-local, and IPv4-mapped literals are now recognised alongside IPv4.
+  Zone-ID'd literals (`fe80::1%eth0`) are captured whole and deliberately
+  discarded — never silently stripped to the bare address. IPv4-mapped
+  literals (`::ffff:192.0.2.1`) are returned verbatim as a single IPv6
+  token. A dedicated calibrated fixture
+  (`tests/fixtures/auth_ipv6_sample.log`) proves IPv6 evidence flows
+  end-to-end through parser -> aggregator -> detector.
 - GitHub Actions CI workflow: runs ruff, mypy, and pytest on every push to
-  main and pull request. Status badge in the README.
+  main and pull request, pinned to Python 3.11. Status badge in the README.
 
 ## [1.1.0] - 2026-06-28
 
@@ -77,7 +87,8 @@ scaffold and matches the `v1.0.0` git tag.
 - PEP 561 typing marker at `src/lst/py.typed`.
 - Smoke test suite asserting the package imports and version shape.
 
-[Unreleased]: https://github.com/wgfreitas/lst/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/wgfreitas/lst/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/wgfreitas/lst/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/wgfreitas/lst/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/wgfreitas/lst/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/wgfreitas/lst/releases/tag/v0.1.0
