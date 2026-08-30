@@ -38,7 +38,7 @@ def test_settings_accepts_legacy_ollama_env_names(
     monkeypatch.setenv("OLLAMA_MODEL", "legacy-model")
     monkeypatch.setenv("OLLAMA_BASE_URL", "https://legacy.example/v1")
 
-    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    settings = Settings(_env_file=None)
 
     assert settings.llm_api_key == "sk-legacy-1234"
     assert settings.llm_model == "legacy-model"
@@ -52,7 +52,7 @@ def test_settings_accepts_new_llm_env_names(
     _clear_provider_env(monkeypatch)
     monkeypatch.setenv("LLM_API_KEY", "sk-new-5678")
 
-    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    settings = Settings(_env_file=None)
 
     assert settings.llm_api_key == "sk-new-5678"
 
@@ -65,6 +65,6 @@ def test_settings_prefers_llm_over_legacy_when_both_present(
     monkeypatch.setenv("OLLAMA_API_KEY", "sk-legacy")
     monkeypatch.setenv("LLM_API_KEY", "sk-canonical")
 
-    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    settings = Settings(_env_file=None)
 
     assert settings.llm_api_key == "sk-canonical"

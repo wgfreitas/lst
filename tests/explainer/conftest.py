@@ -117,7 +117,7 @@ def flagged_event_sample() -> FlaggedEvent:
 def settings_fixture() -> Settings:
     """Return a :class:`Settings` with ``_env_file=None`` to isolate tests."""
     return Settings(
-        _env_file=None,  # type: ignore[call-arg]
+        _env_file=None,
         llm_api_key="test-api-key",
         llm_model="test-model",
         llm_base_url="https://ollama.com/v1",

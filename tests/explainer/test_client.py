@@ -31,7 +31,7 @@ _StructuredMode = Literal["auto", "json_schema", "json_object", "none"]
 def _settings_with_mode(mode: _StructuredMode) -> Settings:
     """Build isolated :class:`Settings` with a pinned structured-output mode."""
     return Settings(
-        _env_file=None,  # type: ignore[call-arg]
+        _env_file=None,
         llm_api_key="test-api-key",
         llm_model="test-model",
         llm_base_url="https://ollama.com/v1",

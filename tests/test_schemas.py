@@ -5,6 +5,8 @@ handling, frozen-model enforcement, and JSON round-trip for the terminal
 schema consumed by the Reporter.
 """
 
+from typing import Any
+
 from datetime import UTC, datetime
 
 import pytest
@@ -289,8 +291,9 @@ def test_explained_event_rejects_negative_latency(flagged_event: FlaggedEvent) -
 
 def test_frozen_models_reject_mutation(log_template: LogTemplate) -> None:
     """``frozen=True`` must prevent field reassignment after construction."""
-    with pytest.raises(ValidationError):
-        log_template.size = 999
+    target: Any = log_template
+        with pytest.raises(ValidationError):
+            log_template.size = 999
 
 
 def test_explained_event_json_roundtrip(explained_event: ExplainedEvent) -> None:
