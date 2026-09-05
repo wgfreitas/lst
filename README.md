@@ -204,7 +204,7 @@ This section addresses the laboratory ebook requirement in section 4.3.1.
 - Event-header truncation defaulted to 80 characters (a VT100-era width) and cut `POSSIBLE BREAK-IN ATTEMPT!` mid-phrase in the report. A smoke test against real Ollama Cloud output surfaced the bug; the limit was raised to 120 in phase 7.2.
 - LLM responses truncated mid-sentence in phase 7.1 because `max_tokens` was not set; the model inherited a conservative default. Fixed by exposing `LLM_MAX_TOKENS` as a configuration knob.
 
-**Why the result is maintainable despite AI involvement.** Every phase followed the same loop: written specification, explicit architectural decisions, implementation, tests that validate behavior rather than implementation details, manual review of each diff. Public naming, pt-BR output strings, and rule semantics were decided by the developer. The test suite (181 tests, 96% branch coverage) provides the regression safety net that lets future changes proceed without re-reading every file.
+**Why the result is maintainable despite AI involvement.** Every phase followed the same loop: written specification, explicit architectural decisions, implementation, tests that validate behavior rather than implementation details, manual review of each diff. Public naming, pt-BR output strings, and rule semantics were decided by the developer. The test suite (197 tests, 96% branch coverage) provides the regression safety net that lets future changes proceed without re-reading every file.
 
 ## Development
 
@@ -440,7 +440,7 @@ Esta seção atende ao requisito da seção 4.3.1 do ebook do laboratório.
 - O truncamento de cabeçalho de evento ficou inicialmente em 80 caracteres (herança da largura VT100) e cortava `POSSIBLE BREAK-IN ATTEMPT!` no meio do relatório. Um smoke test contra a saída real do Ollama Cloud revelou o bug; o limite foi elevado para 120 na fase 7.2.
 - As respostas do LLM foram truncadas no meio da frase na fase 7.1 porque `max_tokens` não estava definido; o modelo herdava um padrão conservador. Corrigido expondo `LLM_MAX_TOKENS` como knob de configuração.
 
-**Por que o resultado é mantível apesar do envolvimento da IA.** Cada fase seguiu o mesmo loop: especificação escrita, decisões arquiteturais explícitas, implementação, testes que validam comportamento (e não detalhes de implementação) e revisão manual de cada diff. Nomes públicos, strings de saída em pt-BR e a semântica das regras foram decididos pelo desenvolvedor. A suíte de testes (181 testes, 96% de cobertura de branches) fornece a rede de segurança que permite mudanças futuras sem reler cada arquivo.
+**Por que o resultado é mantível apesar do envolvimento da IA.** Cada fase seguiu o mesmo loop: especificação escrita, decisões arquiteturais explícitas, implementação, testes que validam comportamento (e não detalhes de implementação) e revisão manual de cada diff. Nomes públicos, strings de saída em pt-BR e a semântica das regras foram decididos pelo desenvolvedor. A suíte de testes (197 testes, 96% de cobertura de branches) fornece a rede de segurança que permite mudanças futuras sem reler cada arquivo.
 
 ## Desenvolvimento
 

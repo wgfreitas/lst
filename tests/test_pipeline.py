@@ -44,7 +44,7 @@ class FakeLLMClient:
 def _settings() -> Settings:
     """Return a :class:`Settings` that ignores any local ``.env`` file."""
     return Settings(
-        _env_file=None,  # type: ignore[call-arg]
+        _env_file=None,
         llm_api_key="test-api-key",
         llm_model="test-model",
     )
@@ -96,7 +96,7 @@ async def test_pipeline_end_to_end_on_fixture() -> None:
 async def test_pipeline_dry_run() -> None:
     """Dry-run skips the LLM, emits placeholders, and never needs an API key."""
     settings = Settings(
-        _env_file=None,  # type: ignore[call-arg]
+        _env_file=None,
         llm_api_key="irrelevant-in-dry-run",
         llm_model="test-model",
     )
