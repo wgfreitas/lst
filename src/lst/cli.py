@@ -12,6 +12,11 @@ fix, not to read a Python stack. ``--verbose`` turns on ``INFO``
 logging, which shows each pipeline stage completing; the raw exception
 message is included in every error line so root-cause information is
 never lost, just reframed.
+
+``lst env-check`` is the one command that does not run the pipeline: it
+reads two local files and delegates to :mod:`lst.envcheck`, which never
+returns a value from the ``.env`` -- so nothing this command prints can
+leak a credential.
 """
 
 from __future__ import annotations
@@ -27,7 +32,11 @@ from pydantic import ValidationError
 
 from lst import __version__
 from lst.config import Settings
+from lst.envcheck import check_env, render_report
 from lst.pipeline import run_pipeline
+
+_DEFAULT_ENV_PATH = Path(".env")
+_DEFAULT_EXAMPLE_PATH = Path(".env.example")
 
 app = typer.Typer(
     name="lst",
@@ -136,3 +145,48 @@ def scan(
 def version_cmd() -> None:
     """Imprime a versão do LST."""
     typer.echo(f"lst {__version__}")
+
+
+def _read_checked_file(path: Path) -> str:
+    """Return the text of ``path`` or raise :class:`typer.Exit` with a pt-BR message.
+
+    Exit code 2 for both a missing and an unreadable file (not UTF-8,
+    permission denied): both are usage errors about the input, the same
+    family as ``scan``'s "arquivo não encontrado". Only the path and the
+    OS/decoder reason are echoed -- never the file content.
+    """
+    if not path.is_file():
+        typer.echo(f"Erro: arquivo não encontrado: {path}", err=True)
+        raise typer.Exit(code=2)
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        typer.echo(f"Erro: não foi possível ler o arquivo: {path} ({exc})", err=True)
+        raise typer.Exit(code=2) from exc
+
+
+@app.command("env-check")
+def env_check(
+    env_path: Annotated[
+        Path,
+        typer.Option(
+            "--env",
+            help="Arquivo .env a conferir (padrão: .env no diretório atual).",
+        ),
+    ] = _DEFAULT_ENV_PATH,
+    example_path: Annotated[
+        Path,
+        typer.Option(
+            "--example",
+            help="Contrato de variáveis (padrão: .env.example no diretório atual).",
+        ),
+    ] = _DEFAULT_EXAMPLE_PATH,
+) -> None:
+    """Confere o .env local contra o contrato .env.example sem exibir valores."""
+    env_text = _read_checked_file(env_path)
+    example_text = _read_checked_file(example_path)
+
+    report = check_env(example_text, env_text)
+    typer.echo(render_report(report))
+    if not report.ok:
+        raise typer.Exit(code=1)
