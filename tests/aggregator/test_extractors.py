@@ -147,3 +147,62 @@ def test_extract_users_collects_multiple_occurrences() -> None:
     """Two independent matches on one line are both captured, in order."""
     line = "Failed password for root; later session opened for user admin"
     assert extract_users(line) == ["root", "admin"]
+
+
+# extract_users: PAM key=value ``user=<name>`` -------------------------------
+
+
+def test_extract_users_after_user_equals_on_pam_auth_failure_line() -> None:
+    """The PAM ``user=<name>`` key=value token captures ``<name>``."""
+    line = (
+        "pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 "
+        "tty=ssh ruser= rhost=203.0.113.5 user=root"
+    )
+    assert extract_users(line) == ["root"]
+
+
+def test_extract_users_after_for_is_unchanged_by_kv_heuristic() -> None:
+    """Regression: the OpenSSH ``for <name>`` phrasing still captures exactly the name."""
+    assert extract_users("Failed password for admin from 203.0.113.9 port 22 ssh2") == ["admin"]
+
+
+def test_extract_users_ignores_empty_ruser_key() -> None:
+    """An empty ``ruser=`` on the same line is not a match and does not shadow ``user=``."""
+    assert extract_users("ruser= rhost=203.0.113.5 user=bob") == ["bob"]
+
+
+def test_extract_users_ignores_populated_ruser_key() -> None:
+    """``ruser=<remote>`` is the remote user, not the target account: never captured."""
+    assert extract_users("ruser=eve rhost=203.0.113.5 user=bob") == ["bob"]
+
+
+def test_extract_users_never_captures_other_kv_keys() -> None:
+    """``logname=``, ``uid=`` and ``euid=`` are not usernames even when ``user=`` is absent."""
+    line = "authentication failure; logname=root uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.5"
+    assert extract_users(line) == []
+
+
+def test_extract_users_mixed_forms_keep_order_and_duplicates() -> None:
+    """``for <name>`` followed by ``user=<name>`` yields both hits, in line order."""
+    line = "Accepted password for alice from 203.0.113.7 port 22 ssh2 user=alice"
+    assert extract_users(line) == ["alice", "alice"]
+
+
+def test_extract_users_for_user_prefix_still_wins_over_kv_arm() -> None:
+    """Regression: ``for user <name>`` keeps capturing ``<name>`` with the ``user=`` arm present."""
+    assert extract_users("session opened for user admin by (uid=0)") == ["admin"]
+
+
+def test_extract_users_user_equals_without_value_is_ignored() -> None:
+    """A dangling ``user=`` at end of line yields nothing (no exception)."""
+    assert extract_users("authentication failure; user=") == []
+
+
+def test_extract_users_user_double_equals_is_ignored() -> None:
+    """``user==root`` is malformed: the value must start right after a single ``=``."""
+    assert extract_users("authentication failure; user==root") == []
+
+
+def test_extract_users_empty_line_returns_empty() -> None:
+    """The empty string is well-formed input and yields an empty list."""
+    assert extract_users("") == []

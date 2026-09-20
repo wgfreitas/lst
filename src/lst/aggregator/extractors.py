@@ -15,9 +15,10 @@ Scope notes for future maintainers:
   verbatim as a single IPv6 token, without normalisation and without
   also reporting the embedded IPv4.
 * ``extract_users`` uses a short whitelist of keyword phrasings that
-  cover OpenSSH / PAM auth messages. New phrasings (``logged in as``,
-  ``authenticated user``, etc.) can be added to the alternation -- the
-  ordering matters, keep the longest prefix first.
+  cover OpenSSH / PAM auth messages, plus the PAM key=value token
+  ``user=<name>``. New phrasings (``logged in as``, ``authenticated
+  user``, etc.) can be added to the alternation -- the ordering
+  matters, keep the longest prefix first.
 """
 
 from __future__ import annotations
@@ -49,11 +50,31 @@ _IP_RE = re.compile(
 )
 """Syntactic IPv4/IPv6 pattern; numerical validity is checked downstream."""
 
-_USER_RE = re.compile(r"\b(?:for user|by user|for|user)\s+(\w+)")
+_USER_RE = re.compile(
+    r"\b(?:"
+    # Whitespace-separated phrasings -- byte-for-byte the original arms.
+    r"(?:for user|by user|for|user)\s+"
+    # PAM key=value token: the key glued to '=' with the value right after
+    # it. The leading \b (shared by every arm) is what excludes ``ruser=``:
+    # there is no word boundary between 'r' and 'u', so only the exact key
+    # ``user`` qualifies. \w+ rejects a dangling ``user=`` and ``user==x``.
+    # ASSUMPTION: the value shares the \w+ class of the other arms, so
+    # ``user=svc-backup`` yields ``svc`` exactly as ``for svc-backup`` does.
+    r"|user="
+    r")(\w+)"
+)
 """Username capture. Alternation is ORDER-SENSITIVE: longer prefixes
 (``for user``, ``by user``) must come before their shorter substrings
 so that "opened for user admin" captures ``admin`` rather than the
-literal keyword ``user``."""
+literal keyword ``user``. The ``user=`` arm never competes with the
+``user <name>`` arm (``=`` versus whitespace after the key), and the
+single alternation keeps ``re.findall`` reporting mixed forms in
+order of occurrence.
+
+``ruser=`` is deliberately NOT captured: on PAM auth-failure lines it
+is usually empty, and when populated it names the remote user, not
+the account under attack. ``logname=``, ``uid=`` and ``euid=`` never
+qualify either -- they do not end in the key ``user``."""
 
 
 def extract_ips(line: str) -> list[str]:
@@ -113,9 +134,15 @@ def extract_users(line: str) -> list[str]:
     * ``by user <name>`` (PAM session lines)
     * ``for <name>`` (OpenSSH password attempts)
     * ``user <name>`` (``invalid user <name>`` and similar)
+    * ``user=<name>`` (PAM ``authentication failure`` key=value lines);
+      only the exact key ``user`` -- ``ruser=``, ``logname=``, ``uid=``
+      and ``euid=`` are never treated as the target account, see
+      :data:`_USER_RE`.
 
     Order of occurrence is preserved and duplicates are retained; the
-    caller is responsible for de-duplication if it cares.
+    caller is responsible for de-duplication if it cares. Malformed
+    tokens (``user=`` with no value, ``user==x``) simply do not match --
+    no exception is raised for any ``str``.
 
     Args:
         line: Raw log line.
@@ -125,6 +152,8 @@ def extract_users(line: str) -> list[str]:
 
     Example:
         >>> extract_users("Failed password for root from 1.2.3.4")
+        ['root']
+        >>> extract_users("authentication failure; ruser= rhost=1.2.3.4 user=root")
         ['root']
     """
     return _USER_RE.findall(line)
