@@ -1,0 +1,16 @@
+--- /tmp/claude-0/-home-claude/b2e74239-2f02-5348-9ad8-b2135202a024/scratchpad/exp/before/test_cli.py	2026-09-20 08:19:15.377208949 -0300
++++ /tmp/claude-0/-home-claude/b2e74239-2f02-5348-9ad8-b2135202a024/scratchpad/exp/after/test_cli.py	2026-09-20 08:32:43.279799031 -0300
+@@ -121,6 +121,13 @@
+ # --- env-check ----------------------------------------------------------------
+ 
+ 
++def test_cli_help_lists_env_check(runner: CliRunner) -> None:
++    """Top-level ``--help`` surfaces the additive ``env-check`` command."""
++    invocation = runner.invoke(app, ["--help"])
++    assert invocation.exit_code == 0
++    assert "env-check" in " ".join(invocation.stdout.split())
++
++
+ def _write_contract(directory: Path) -> Path:
+     """Copy the real ``.env.example`` into ``directory`` and return its path."""
+     contract_path = directory / ".env.example"

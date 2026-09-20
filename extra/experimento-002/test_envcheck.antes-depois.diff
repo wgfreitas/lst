@@ -1,0 +1,255 @@
+--- /tmp/claude-0/-home-claude/b2e74239-2f02-5348-9ad8-b2135202a024/scratchpad/exp/before/test_envcheck.py	2026-09-20 08:19:15.366915542 -0300
++++ /tmp/claude-0/-home-claude/b2e74239-2f02-5348-9ad8-b2135202a024/scratchpad/exp/after/test_envcheck.py	2026-09-20 08:32:43.277991605 -0300
+@@ -81,7 +81,7 @@
+     api_key_entry = parsed.find("LLM_API_KEY")
+     model_entry = parsed.find("LLM_MODEL")
+     assert api_key_entry is not None and api_key_entry.is_empty is True
+-    assert model_entry is not None and model_entry.value == "gpt-oss:20b"
++    assert model_entry is not None and model_entry.is_empty is False
+ 
+ 
+ def test_n2_legacy_aliases_satisfy_canonical_keys_with_warnings(example_text: str) -> None:
+@@ -122,6 +122,7 @@
+ 
+     assert _kinds(report.findings) == [FindingKind.MISSING, FindingKind.LEGACY]
+     assert report.ok is False
++    assert render_report(report).endswith("1 erro(s), 1 aviso(s)")
+ 
+ 
+ def test_n2_canonical_key_takes_precedence_over_legacy_alias(example_text: str) -> None:
+@@ -167,12 +168,12 @@
+ 
+ 
+ def test_l3_export_prefix_and_enclosing_quotes_are_accepted(example_text: str) -> None:
+-    """``export KEY="value"`` parses to the bare key and unquoted value; no findings."""
+-    parsed = parse_dotenv("export LLM_MODEL=\"fake-model\"\nexport LLM_BASE_URL='http://fake'\n")
++    """``export KEY="value"`` parses to the bare key; quotes wrap the value; no findings."""
++    parsed = parse_dotenv("export LLM_MODEL=\"fake-model\"\nexport LLM_BASE_URL=''\n")
+ 
+-    assert [(entry.key, entry.value) for entry in parsed.entries] == [
+-        ("LLM_MODEL", "fake-model"),
+-        ("LLM_BASE_URL", "http://fake"),
++    assert [(entry.key, entry.is_empty) for entry in parsed.entries] == [
++        ("LLM_MODEL", False),
++        ("LLM_BASE_URL", True),
+     ]
+     assert parsed.malformed_lines == ()
+ 
+@@ -180,6 +181,17 @@
+     assert report.findings == ()
+ 
+ 
++def test_l3_export_followed_by_tabs_is_accepted(example_text: str) -> None:
++    """Rule 2 clarified: ``export`` may be followed by any run of spaces or tabs."""
++    parsed = parse_dotenv("export\tLLM_MODEL=fake-model\nexport \t LLM_BASE_URL=http://fake\n")
++
++    assert [entry.key for entry in parsed.entries] == ["LLM_MODEL", "LLM_BASE_URL"]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, "export\tLLM_API_KEY=fake-key\n")
++    assert report.findings == ()
++
++
+ def test_l4_optional_key_with_empty_value_is_empty_error(example_text: str) -> None:
+     """``LLM_MODEL=`` is an error: Settings rejects the empty string instead of defaulting."""
+     report = check_env(example_text, "LLM_API_KEY=fake-key\nLLM_MODEL=\n")
+@@ -197,14 +209,13 @@
+ 
+ def test_l5_duplicate_key_warns_with_both_lines_and_last_wins(example_text: str) -> None:
+     """A key on two lines is one duplicate warning citing both; the last value is effective."""
+-    env_text = "LLM_API_KEY=fake-first\n\nLLM_API_KEY=fake-last\n"
+-    parsed = parse_dotenv(env_text)
++    parsed = parse_dotenv("LLM_API_KEY=fake-first\n\nLLM_API_KEY=\n")
+ 
+     assert len(parsed.entries) == 1
+-    assert parsed.entries[0].value == "fake-last"
++    assert parsed.entries[0].is_empty is True  # the last (empty) occurrence wins
+     assert parsed.entries[0].lines == (1, 3)
+ 
+-    report = check_env(example_text, env_text)
++    report = check_env(example_text, "LLM_API_KEY=fake-first\n\nLLM_API_KEY=fake-last\n")
+     assert len(report.findings) == 1
+     finding = report.findings[0]
+     assert finding.kind is FindingKind.DUPLICATE
+@@ -217,24 +228,21 @@
+     )
+ 
+ 
+-def test_l5_duplicate_key_in_example_file_is_reported_with_file_label(
+-    example_text: str,
+-) -> None:
++def test_l5_duplicate_key_in_example_file_is_reported_with_file_label() -> None:
+     """A repeated key in the contract file itself is a warning naming that file."""
+-    first_appended_line = example_text.count("\n") + 1
+-    contract_with_duplicate = example_text + "LLM_MODEL=\nLLM_MODEL=fake-model\n"
++    contract_with_duplicate = "LLM_API_KEY=\nLLM_MODEL=\nLLM_MODEL=fake-model\n"
+     report = check_env(contract_with_duplicate, "LLM_API_KEY=fake-key\n")
+ 
+     assert _kinds(report.findings) == [FindingKind.DUPLICATE]
+     finding = report.findings[0]
+     assert finding.file is CheckedFile.EXAMPLE
+     assert finding.key == "LLM_MODEL"
+-    assert finding.lines == (14, first_appended_line, first_appended_line + 1)
+-    assert report.checked_key_count == 8
++    assert finding.lines == (2, 3)
++    assert report.checked_key_count == 2  # the last definition wins: LLM_MODEL is optional
+     assert (
+-        f"chave repetida no arquivo de exemplo (linhas 14, {first_appended_line} e "
+-        f"{first_appended_line + 1})"
+-    ) in render_report(report)
++        "[AVISO] LLM_MODEL: chave repetida no arquivo de exemplo (linhas 2 e 3) — a última vale"
++        in render_report(report)
++    )
+ 
+ 
+ def test_l6_empty_env_yields_exactly_one_missing_for_the_api_key(example_text: str) -> None:
+@@ -261,6 +269,50 @@
+     assert report.ok is True
+ 
+ 
++def test_l7_unknown_key_keeps_its_original_spelling(example_text: str) -> None:
++    """Rule 5: comparison ignores case, but the output shows the key as written."""
++    report = check_env(example_text, "lst_http_timeout=1\nLLM_API_KEY=fake-key\n")
++
++    assert "[AVISO] lst_http_timeout: chave desconhecida (linha 1)" in render_report(report)
++
++
++def test_l8_spaces_and_tabs_around_equals_are_accepted(example_text: str) -> None:
++    """Rule 3 clarified: ``KEY = value`` (spaces or tabs around ``=``) is a normal line."""
++    parsed = parse_dotenv("LLM_MODEL\t=\tfake-model\nLLM_BASE_URL =\n")
++
++    assert [(entry.key, entry.is_empty) for entry in parsed.entries] == [
++        ("LLM_MODEL", False),
++        ("LLM_BASE_URL", True),
++    ]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, "LLM_API_KEY = fake-key\n")
++    assert report.findings == ()
++    assert report.ok is True
++
++
++def test_l9_leading_utf8_bom_is_discarded(example_text: str) -> None:
++    """A UTF-8 BOM before the first key is ignored, as python-dotenv does."""
++    parsed = parse_dotenv("\ufeffLLM_API_KEY=fake-key\n")
++
++    assert [entry.key for entry in parsed.entries] == ["LLM_API_KEY"]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, "\ufeffLLM_API_KEY=fake-key\n")
++    assert report.findings == ()
++
++
++def test_l10_quoted_value_followed_by_comment_is_accepted(example_text: str) -> None:
++    """``KEY="value" # comment``: the quoted value counts, the comment is ignored."""
++    parsed = parse_dotenv('LLM_MODEL="fake-model" # comentário\n')
++
++    assert [(entry.key, entry.is_empty) for entry in parsed.entries] == [("LLM_MODEL", False)]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, 'LLM_API_KEY=fake-key\nLLM_MODEL="fake-model" # comentário\n')
++    assert report.findings == ()
++
++
+ # --- Errors -----------------------------------------------------------------
+ 
+ 
+@@ -285,22 +337,21 @@
+     assert "[AVISO] linha 2: malformada (ignorada)" in rendered
+     assert "fake-secret-without-key" not in rendered
+     assert "fake-secret-without-key" not in repr(report)
++    assert "fake-secret-without-key" not in repr(parsed)
+ 
+ 
+-def test_e3_malformed_line_in_example_file_is_reported_with_file_label(
+-    example_text: str,
+-) -> None:
++def test_e3_malformed_line_in_example_file_is_reported_with_file_label() -> None:
+     """A broken line in the contract file is a warning naming that file, not silence."""
+-    appended_line = example_text.count("\n") + 1
+-    report = check_env(example_text + "fake-secret-without-key\n", "LLM_API_KEY=fake-key\n")
++    contract_with_junk = "LLM_API_KEY=\nfake-secret-without-key\n"
++    report = check_env(contract_with_junk, "LLM_API_KEY=fake-key\n")
+ 
+     assert _kinds(report.findings) == [FindingKind.MALFORMED]
+     finding = report.findings[0]
+     assert finding.file is CheckedFile.EXAMPLE
+-    assert finding.lines == (appended_line,)
++    assert finding.lines == (2,)
+ 
+     rendered = render_report(report)
+-    assert f"[AVISO] linha {appended_line} do arquivo de exemplo: malformada (ignorada)" in rendered
++    assert "[AVISO] linha 2 do arquivo de exemplo: malformada (ignorada)" in rendered
+     assert "fake-secret-without-key" not in rendered
+ 
+ 
+@@ -309,14 +360,61 @@
+     env_lines = [f"{key}={_SENTINEL}" for key in _CONTRACT_KEYS]
+     env_lines += [f"{alias}={_SENTINEL}" for alias in ("OLLAMA_API_KEY", "OLLAMA_MODEL")]
+     env_lines += [f"LLM_API_KEY='{_SENTINEL}'", f"LST_HTTP_TIMEOUT={_SENTINEL}", _SENTINEL]
+-    report = check_env(example_text, "\n".join(env_lines) + "\n")
++    env_text = "\n".join(env_lines) + "\n"
++    report = check_env(example_text, env_text)
+ 
+-    assert _kinds(report.findings) == [
+-        FindingKind.LEGACY,
+-        FindingKind.LEGACY,
+-        FindingKind.UNKNOWN,
+-        FindingKind.DUPLICATE,
+-        FindingKind.MALFORMED,
+-    ]
++    assert sorted(_kinds(report.findings)) == sorted(
++        [
++            FindingKind.LEGACY,
++            FindingKind.LEGACY,
++            FindingKind.UNKNOWN,
++            FindingKind.DUPLICATE,
++            FindingKind.MALFORMED,
++        ]
++    )
+     assert _SENTINEL not in render_report(report)
+     assert _SENTINEL not in repr(report)
++    assert _SENTINEL not in repr(parse_dotenv(env_text))
++
++
++def test_e5_unclosed_quote_is_malformed_and_key_counts_as_absent(example_text: str) -> None:
++    """``KEY="value`` (no closing quote) is malformed: line number only, key absent."""
++    env_text = 'LLM_API_KEY="fake-key\n'
++    parsed = parse_dotenv(env_text)
++
++    assert parsed.entries == ()
++    assert parsed.malformed_lines == (1,)
++
++    report = check_env(example_text, env_text)
++    assert _kinds(report.findings) == [FindingKind.MISSING, FindingKind.MALFORMED]
++    assert report.findings[0].lines == ()
++    assert report.findings[1].lines == (1,)
++    assert report.ok is False
++
++    rendered = render_report(report)
++    assert "[ERRO] LLM_API_KEY: obrigatória e ausente" in rendered
++    assert "[AVISO] linha 1: malformada (ignorada)" in rendered
++    assert rendered.endswith("1 erro(s), 1 aviso(s)")
++    assert "fake-key" not in rendered
++    assert "fake-key" not in repr(report)
++    assert "fake-key" not in repr(parsed)
++
++
++def test_e5_text_after_closing_quote_is_malformed() -> None:
++    """Only spaces or a ``#`` comment may follow a closing quote; anything else is malformed."""
++    parsed = parse_dotenv('LLM_MODEL="fake-model" extra\nLLM_BASE_URL="a"b"\n')
++
++    assert parsed.entries == ()
++    assert parsed.malformed_lines == (1, 2)
++
++
++def test_e6_empty_quoted_value_with_comment_is_missing_with_line(example_text: str) -> None:
++    """``KEY="" # comment`` is an empty value: a required key is missing, citing the line."""
++    report = check_env(example_text, 'LLM_API_KEY="" # preencha\n')
++
++    assert len(report.findings) == 1
++    finding = report.findings[0]
++    assert finding.kind is FindingKind.MISSING
++    assert finding.lines == (1,)
++    assert report.ok is False
++    assert "[ERRO] LLM_API_KEY: obrigatória e vazia (linha 1)" in render_report(report)

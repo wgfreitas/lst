@@ -1,0 +1,1172 @@
+diff --git a/src/lst/cli.py b/src/lst/cli.py
+index 3aa661b..63f033c 100644
+--- a/src/lst/cli.py
++++ b/src/lst/cli.py
+@@ -12,6 +12,11 @@ fix, not to read a Python stack. ``--verbose`` turns on ``INFO``
+ logging, which shows each pipeline stage completing; the raw exception
+ message is included in every error line so root-cause information is
+ never lost, just reframed.
++
++``lst env-check`` is the one command that does not run the pipeline: it
++reads two local files and delegates to :mod:`lst.envcheck`, which never
++returns a value from the ``.env`` -- so nothing this command prints can
++leak a credential.
+ """
+ 
+ from __future__ import annotations
+@@ -27,8 +32,12 @@ from pydantic import ValidationError
+ 
+ from lst import __version__
+ from lst.config import Settings
++from lst.envcheck import check_env, render_report
+ from lst.pipeline import run_pipeline
+ 
++_DEFAULT_ENV_PATH = Path(".env")
++_DEFAULT_EXAMPLE_PATH = Path(".env.example")
++
+ app = typer.Typer(
+     name="lst",
+     help="Triagem de logs de segurança via pipeline determinístico + LLM.",
+@@ -136,3 +145,48 @@ def scan(
+ def version_cmd() -> None:
+     """Imprime a versão do LST."""
+     typer.echo(f"lst {__version__}")
++
++
++def _read_checked_file(path: Path) -> str:
++    """Return the text of ``path`` or raise :class:`typer.Exit` with a pt-BR message.
++
++    Exit code 2 for both a missing and an unreadable file (not UTF-8,
++    permission denied): both are usage errors about the input, the same
++    family as ``scan``'s "arquivo não encontrado". Only the path and the
++    OS/decoder reason are echoed -- never the file content.
++    """
++    if not path.is_file():
++        typer.echo(f"Erro: arquivo não encontrado: {path}", err=True)
++        raise typer.Exit(code=2)
++    try:
++        return path.read_text(encoding="utf-8")
++    except (OSError, UnicodeDecodeError) as exc:
++        typer.echo(f"Erro: não foi possível ler o arquivo: {path} ({exc})", err=True)
++        raise typer.Exit(code=2) from exc
++
++
++@app.command("env-check")
++def env_check(
++    env_path: Annotated[
++        Path,
++        typer.Option(
++            "--env",
++            help="Arquivo .env a conferir (padrão: .env no diretório atual).",
++        ),
++    ] = _DEFAULT_ENV_PATH,
++    example_path: Annotated[
++        Path,
++        typer.Option(
++            "--example",
++            help="Contrato de variáveis (padrão: .env.example no diretório atual).",
++        ),
++    ] = _DEFAULT_EXAMPLE_PATH,
++) -> None:
++    """Confere o .env local contra o contrato .env.example sem exibir valores."""
++    env_text = _read_checked_file(env_path)
++    example_text = _read_checked_file(example_path)
++
++    report = check_env(example_text, env_text)
++    typer.echo(render_report(report))
++    if not report.ok:
++        raise typer.Exit(code=1)
+diff --git a/src/lst/envcheck.py b/src/lst/envcheck.py
+new file mode 100644
+index 0000000..0d0894e
+--- /dev/null
++++ b/src/lst/envcheck.py
+@@ -0,0 +1,494 @@
++"""Check a local ``.env`` against the ``.env.example`` contract without exposing values.
++
++``lst env-check`` exists because of two recurring incidents: dead variables
++in ``.env`` (``LST_HTTP_TIMEOUT``, ``LST_MAX_FLAGGED_EVENTS``) that
++:class:`~lst.config.Settings` silently ignored, and API keys leaked by
++printing ``.env`` in a terminal. This module answers "is my ``.env``
++coherent with the contract?" using key names and line numbers only.
++
++Three pure steps, one function each:
++
++* :func:`parse_dotenv` -- dotenv text -> :class:`ParsedDotenv`. The same
++  parser reads both files and never raises, whatever the input.
++* :func:`check_env` -- contract x env -> :class:`EnvReport` holding
++  :class:`EnvFinding` items.
++* :func:`render_report` -- report -> pt-BR text for the analyst.
++
++Paths, file reading and exit codes belong to :mod:`lst.cli`.
++
++Design rules enforced here:
++
++* Values never leave the parser -- structurally. :class:`DotenvEntry`
++  records only whether a value is empty, so no object in this module can
++  hold, ``repr`` or print a secret; findings, the report and the rendered
++  text carry keys and line numbers only, and the output can be pasted into
++  a ticket or a chat without leaking a credential.
++* A malformed line is recorded by its number only, never by its content:
++  a line without ``=`` is most likely a secret pasted without its key.
++* Unexpected input is a finding, not an exception. Both files are
++  external input; a broken line must reach the analyst as a warning, never
++  as a traceback (which would also dump locals holding the file text).
++* The parser agrees with the ``python-dotenv`` reader behind ``Settings``
++  on presence and emptiness: ``export`` plus spaces/tabs, spaces/tabs
++  around ``=``, a leading UTF-8 BOM, and quoted values that must close on
++  the same line (followed only by spaces or a ``#`` comment). Multi-line
++  quoted values are out of scope and surface as malformed lines.
++* The contract is the ``.env.example`` itself: an empty value there means
++  "required", a filled value means "optional, ``Settings`` has a default".
++  Keys are compared case-insensitively, mirroring ``case_sensitive=False``
++  in ``Settings``.
++* Legacy ``OLLAMA_*`` names are a fixed table mirroring the
++  ``AliasChoices`` in ``Settings``, so a v1.0.0 ``.env`` passes with
++  warnings instead of false "missing" errors. Canonical spelling wins over
++  the alias, in the same order ``AliasChoices`` resolves them.
++* Type and range validation stays in ``Settings``; this module checks
++  presence, emptiness and naming only.
++"""
++
++from __future__ import annotations
++
++import re
++from collections.abc import Mapping
++from dataclasses import dataclass
++from enum import StrEnum
++from typing import Final, assert_never
++
++_UTF8_BOM: Final = "\ufeff"
++_COMMENT_PREFIX: Final = "#"
++_KEY_VALUE_RE: Final = re.compile(
++    # Optional `export` keyword, the key, then `=` with spaces/tabs allowed around it.
++    r"(?:export[ \t]+)?(?P<key>[A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*"
++    # Either a quoted value closed on the same line, followed only by spaces or a comment...
++    r"(?:(?:\"(?P<double_quoted>[^\"]*)\"|'(?P<single_quoted>[^']*)')[ \t]*(?:#.*)?"
++    # ...or an unquoted value: everything up to the end of the line, `#` included.
++    r"|(?P<unquoted>(?![\"']).*))"
++)
++_QUOTED_VALUE_GROUPS: Final = ("double_quoted", "single_quoted")
++
++_LEGACY_ALIASES: Final[Mapping[str, str]] = {
++    "OLLAMA_API_KEY": "LLM_API_KEY",
++    "OLLAMA_MODEL": "LLM_MODEL",
++    "OLLAMA_BASE_URL": "LLM_BASE_URL",
++}
++"""Legacy (v1.0.0) env name -> canonical name, mirroring ``Settings``' ``AliasChoices``.
++
++Kept as a fixed table rather than derived from ``Settings`` so this module
++stays free of pydantic internals; ``tests/test_envcheck.py`` guards the
++mirror against drift.
++"""
++
++
++class FindingKind(StrEnum):
++    """What an :class:`EnvFinding` reports about a key or a line."""
++
++    MISSING = "missing"
++    EMPTY = "empty"
++    UNKNOWN = "unknown"
++    LEGACY = "legacy"
++    DUPLICATE = "duplicate"
++    MALFORMED = "malformed"
++
++
++class FindingSeverity(StrEnum):
++    """Whether a finding blocks (``error``) or merely warns.
++
++    Named ``FindingSeverity`` to avoid colliding with the LLM-assigned
++    :class:`lst.schemas.Severity` of triage events.
++    """
++
++    ERROR = "error"
++    WARNING = "warning"
++
++
++class CheckedFile(StrEnum):
++    """Which of the two input files a finding refers to."""
++
++    ENV = "env"
++    EXAMPLE = "example"
++
++
++_SEVERITY_BY_KIND: Final[Mapping[FindingKind, FindingSeverity]] = {
++    FindingKind.MISSING: FindingSeverity.ERROR,
++    FindingKind.EMPTY: FindingSeverity.ERROR,
++    FindingKind.UNKNOWN: FindingSeverity.WARNING,
++    FindingKind.LEGACY: FindingSeverity.WARNING,
++    FindingKind.DUPLICATE: FindingSeverity.WARNING,
++    FindingKind.MALFORMED: FindingSeverity.WARNING,
++}
++
++_SEVERITY_LABEL_PT: Final[Mapping[FindingSeverity, str]] = {
++    FindingSeverity.ERROR: "ERRO",
++    FindingSeverity.WARNING: "AVISO",
++}
++
++_EXAMPLE_FILE_LABEL_PT: Final = "arquivo de exemplo"
++
++
++@dataclass(frozen=True)
++class DotenvEntry:
++    """One key of a dotenv file after duplicate resolution.
++
++    The value itself is dropped by the parser: only whether it is empty
++    survives, so this object can be logged or ``repr``-ed without ever
++    exposing a secret.
++
++    Attributes:
++        key: Key spelling as written on the effective (last) line.
++        is_empty: Whether the effective value (stripped, unquoted) is the
++            empty string.
++        lines: 1-based numbers of every line defining this key, in file
++            order. More than one line means the key is duplicated and the
++            last one wins (dotenv semantics).
++    """
++
++    key: str
++    is_empty: bool
++    lines: tuple[int, ...]
++
++    @property
++    def line(self) -> int:
++        """Return the line whose value is effective (the last occurrence)."""
++        return self.lines[-1]
++
++    @property
++    def is_duplicated(self) -> bool:
++        """Return whether the key appears on more than one line."""
++        return len(self.lines) > 1
++
++
++@dataclass(frozen=True)
++class ParsedDotenv:
++    """Structured view of one dotenv file.
++
++    Attributes:
++        entries: One entry per distinct key (case-insensitive), in order
++            of first appearance.
++        malformed_lines: 1-based numbers of lines that are neither blank,
++            comment nor ``KEY=value``. Numbers only, by design.
++    """
++
++    entries: tuple[DotenvEntry, ...]
++    malformed_lines: tuple[int, ...]
++
++    def find(self, key: str) -> DotenvEntry | None:
++        """Return the entry for ``key`` (case-insensitive), or ``None`` when absent.
++
++        Args:
++            key: Key name in any casing.
++
++        Returns:
++            The matching :class:`DotenvEntry`, or ``None`` if the file
++            does not define the key. Absence is a normal outcome here,
++            not a failure.
++        """
++        wanted = _normalise_key(key)
++        for entry in self.entries:
++            if _normalise_key(entry.key) == wanted:
++                return entry
++        return None
++
++
++@dataclass(frozen=True)
++class EnvFinding:
++    """One problem found while checking the ``.env``.
++
++    Attributes:
++        kind: What was found; the severity follows from it.
++        key: Key spelling as written in the file it came from. ``None``
++            only for :attr:`FindingKind.MALFORMED`, where no key exists.
++        lines: 1-based lines involved. Empty for a required key that is
++            absent; every occurrence for a duplicate; one line otherwise.
++        file: Which input file the line numbers refer to. Key-based
++            findings are always about the ``.env``; ``duplicate`` and
++            ``malformed`` may come from the example file too.
++    """
++
++    kind: FindingKind
++    key: str | None
++    lines: tuple[int, ...]
++    file: CheckedFile = CheckedFile.ENV
++
++    @property
++    def severity(self) -> FindingSeverity:
++        """Return the severity implied by :attr:`kind`."""
++        return _SEVERITY_BY_KIND[self.kind]
++
++
++@dataclass(frozen=True)
++class EnvReport:
++    """Outcome of :func:`check_env`.
++
++    Not a pipeline-stage contract, so a frozen dataclass is enough; the
++    Pydantic schemas in :mod:`lst.schemas` stay reserved for the pipeline.
++
++    Attributes:
++        findings: Every finding, in report order: contract keys first
++            (missing / empty), then ``.env`` keys (legacy / unknown), then
++            parse findings of the ``.env`` and finally of the example file.
++        checked_key_count: Number of distinct keys the contract defines.
++    """
++
++    findings: tuple[EnvFinding, ...]
++    checked_key_count: int
++
++    @property
++    def error_count(self) -> int:
++        """Return how many findings have error severity."""
++        return sum(finding.severity is FindingSeverity.ERROR for finding in self.findings)
++
++    @property
++    def warning_count(self) -> int:
++        """Return how many findings have warning severity."""
++        return sum(finding.severity is FindingSeverity.WARNING for finding in self.findings)
++
++    @property
++    def ok(self) -> bool:
++        """Return whether the ``.env`` can be used as-is (no error findings)."""
++        return self.error_count == 0
++
++
++def parse_dotenv(text: str) -> ParsedDotenv:
++    """Parse dotenv text into keys, emptiness flags and malformed line numbers.
++
++    Rules: a leading UTF-8 BOM is discarded; blank lines and lines whose
++    first non-blank character is ``#`` are skipped; an ``export`` keyword
++    followed by spaces/tabs is dropped; a valid line is ``KEY=value`` with
++    ``KEY`` matching ``[A-Za-z_][A-Za-z0-9_]*`` and spaces/tabs allowed
++    around ``=``. A quoted value (``"`` or ``'``) must close on the same
++    line and may be followed only by spaces or a ``#`` comment; its inner
++    text is the value (possibly empty). An unquoted value runs to the end
++    of the line, ``#`` included, with surrounding spaces removed. Anything
++    else is malformed and recorded by line number only. Keys repeat
++    case-insensitively; the last one wins.
++
++    Args:
++        text: Full content of a dotenv file. Any string is accepted.
++
++    Returns:
++        A :class:`ParsedDotenv`; this function never raises and the result
++        holds no value, only whether each one is empty.
++
++    Example:
++        >>> parsed = parse_dotenv('export LLM_MODEL="fake-model"\\noops\\n')
++        >>> (parsed.entries[0].key, parsed.entries[0].is_empty, parsed.malformed_lines)
++        ('LLM_MODEL', False, (2,))
++    """
++    entries_by_key: dict[str, DotenvEntry] = {}
++    malformed_lines: list[int] = []
++
++    # A BOM is not whitespace for str.strip(); dropping it mirrors python-dotenv.
++    text = text.removeprefix(_UTF8_BOM)
++
++    # split("\n") rather than splitlines(): the latter also breaks on form
++    # feeds and Unicode separators, which would desynchronise the reported
++    # numbers from what the analyst sees in an editor.
++    for line_number, raw_line in enumerate(text.split("\n"), start=1):
++        line = raw_line.strip()
++        if not line or line.startswith(_COMMENT_PREFIX):
++            continue
++
++        matched = _KEY_VALUE_RE.fullmatch(line)
++        if matched is None:
++            malformed_lines.append(line_number)
++            continue
++
++        key = matched.group("key")
++        previous = entries_by_key.get(_normalise_key(key))
++        earlier_lines = previous.lines if previous is not None else ()
++        entries_by_key[_normalise_key(key)] = DotenvEntry(
++            key=key,
++            is_empty=_is_empty_value(matched),
++            lines=(*earlier_lines, line_number),
++        )
++
++    return ParsedDotenv(
++        entries=tuple(entries_by_key.values()),
++        malformed_lines=tuple(malformed_lines),
++    )
++
++
++def check_env(example_text: str, env_text: str) -> EnvReport:
++    """Compare a ``.env`` against the ``.env.example`` contract.
++
++    Args:
++        example_text: Content of the contract file. An empty value marks
++            the key as required; a filled value marks it as optional.
++        env_text: Content of the local ``.env``.
++
++    Returns:
++        An :class:`EnvReport`; its :attr:`EnvReport.ok` is ``True`` when no
++        finding has error severity. Values from either file never reach
++        the report.
++
++    Example:
++        >>> report = check_env("LLM_API_KEY=\\nLLM_MODEL=x\\n", "LLM_API_KEY=fake-key\\n")
++        >>> (report.ok, report.checked_key_count, report.findings)
++        (True, 2, ())
++    """
++    contract = parse_dotenv(example_text)
++    env = parse_dotenv(env_text)
++
++    findings: list[EnvFinding] = []
++    findings.extend(_check_contract_keys(contract, env))
++    findings.extend(_check_env_keys(contract, env))
++    findings.extend(_findings_from_parsing(env, CheckedFile.ENV))
++    findings.extend(_findings_from_parsing(contract, CheckedFile.EXAMPLE))
++
++    return EnvReport(findings=tuple(findings), checked_key_count=len(contract.entries))
++
++
++def render_report(report: EnvReport) -> str:
++    """Render an :class:`EnvReport` as pt-BR text: one line per finding plus a summary.
++
++    Args:
++        report: Outcome of :func:`check_env`.
++
++    Returns:
++        Lines joined by ``\\n`` (no trailing newline). Only key names and
++        line numbers appear -- never values.
++
++    Example:
++        >>> print(render_report(check_env("LLM_API_KEY=\\n", "")))
++        [ERRO] LLM_API_KEY: obrigatória e ausente
++        1 erro(s), 0 aviso(s)
++    """
++    lines = [
++        f"[{_SEVERITY_LABEL_PT[finding.severity]}] {_describe(finding)}"
++        for finding in report.findings
++    ]
++    lines.append(_summary_line(report))
++    return "\n".join(lines)
++
++
++def _normalise_key(key: str) -> str:
++    """Return the case-insensitive comparison form of a key (ASCII upper-case)."""
++    return key.upper()
++
++
++def _is_empty_value(matched: re.Match[str]) -> bool:
++    """Return whether the value captured by :data:`_KEY_VALUE_RE` is the empty string.
++
++    Exactly one of the three value groups participates in a match: the
++    inner text of a quoted value, or the unquoted remainder of the line.
++    """
++    for group_name in _QUOTED_VALUE_GROUPS:
++        inner_text = matched.group(group_name)
++        if inner_text is not None:
++            return inner_text == ""
++    return matched.group("unquoted").strip() == ""
++
++
++def _legacy_alias_of(canonical_key: str) -> str | None:
++    """Return the legacy env name for ``canonical_key``, or ``None`` if it has none."""
++    wanted = _normalise_key(canonical_key)
++    return next(
++        (alias for alias, canonical in _LEGACY_ALIASES.items() if canonical == wanted),
++        None,
++    )
++
++
++def _resolve_effective_entry(env: ParsedDotenv, canonical_key: str) -> DotenvEntry | None:
++    """Return the ``.env`` entry that ``Settings`` would read for ``canonical_key``.
++
++    The canonical spelling wins even when empty, because ``AliasChoices``
++    stops at the first name present -- an empty ``LLM_API_KEY`` next to a
++    filled ``OLLAMA_API_KEY`` still fails validation.
++    """
++    canonical_entry = env.find(canonical_key)
++    if canonical_entry is not None:
++        return canonical_entry
++    legacy_name = _legacy_alias_of(canonical_key)
++    return env.find(legacy_name) if legacy_name is not None else None
++
++
++def _check_contract_keys(contract: ParsedDotenv, env: ParsedDotenv) -> list[EnvFinding]:
++    """Flag contract keys that are missing (required) or empty in the ``.env``."""
++    findings: list[EnvFinding] = []
++    for contract_entry in contract.entries:
++        is_required = contract_entry.is_empty
++        effective = _resolve_effective_entry(env, contract_entry.key)
++        if effective is None:
++            if is_required:
++                findings.append(EnvFinding(FindingKind.MISSING, key=contract_entry.key, lines=()))
++        elif effective.is_empty:
++            kind = FindingKind.MISSING if is_required else FindingKind.EMPTY
++            findings.append(EnvFinding(kind, key=effective.key, lines=(effective.line,)))
++    return findings
++
++
++def _check_env_keys(contract: ParsedDotenv, env: ParsedDotenv) -> list[EnvFinding]:
++    """Flag ``.env`` keys that are legacy aliases or unknown to the contract."""
++    findings: list[EnvFinding] = []
++    for entry in env.entries:
++        if _normalise_key(entry.key) in _LEGACY_ALIASES:
++            findings.append(EnvFinding(FindingKind.LEGACY, key=entry.key, lines=(entry.line,)))
++        elif contract.find(entry.key) is None:
++            findings.append(EnvFinding(FindingKind.UNKNOWN, key=entry.key, lines=(entry.line,)))
++    return findings
++
++
++def _findings_from_parsing(parsed: ParsedDotenv, file: CheckedFile) -> list[EnvFinding]:
++    """Turn a file's duplicate keys and malformed lines into findings."""
++    findings = [
++        EnvFinding(FindingKind.DUPLICATE, key=entry.key, lines=entry.lines, file=file)
++        for entry in parsed.entries
++        if entry.is_duplicated
++    ]
++    findings.extend(
++        EnvFinding(FindingKind.MALFORMED, key=None, lines=(line_number,), file=file)
++        for line_number in parsed.malformed_lines
++    )
++    return findings
++
++
++def _describe(finding: EnvFinding) -> str:
++    """Return the pt-BR body of a finding line (after the ``[ERRO]``/``[AVISO]`` tag)."""
++    where = _format_lines(finding.lines)
++    is_in_example = finding.file is CheckedFile.EXAMPLE
++
++    match finding.kind:
++        case FindingKind.MISSING:
++            if not finding.lines:
++                return f"{finding.key}: obrigatória e ausente"
++            return f"{finding.key}: obrigatória e vazia ({where})"
++        case FindingKind.EMPTY:
++            return f"{finding.key}: vazia — preencha ou remova a linha para usar o padrão ({where})"
++        case FindingKind.UNKNOWN:
++            return f"{finding.key}: chave desconhecida ({where})"
++        case FindingKind.LEGACY:
++            if finding.key is None:
++                raise ValueError("legacy finding without a key")  # only malformed lines have none
++            preferred = _LEGACY_ALIASES[_normalise_key(finding.key)]
++            return f"{finding.key}: nome legado — prefira {preferred}"
++        case FindingKind.DUPLICATE:
++            if is_in_example:
++                return (
++                    f"{finding.key}: chave repetida no {_EXAMPLE_FILE_LABEL_PT} ({where})"
++                    " — a última vale"
++                )
++            return f"{finding.key}: chave repetida ({where}) — a última vale"
++        case FindingKind.MALFORMED:
++            # The number is all the analyst gets, on purpose -- the content
++            # may be a secret pasted without its key.
++            if is_in_example:
++                return f"{where} do {_EXAMPLE_FILE_LABEL_PT}: malformada (ignorada)"
++            return f"{where}: malformada (ignorada)"
++        case _:
++            assert_never(finding.kind)
++
++
++def _format_lines(lines: tuple[int, ...]) -> str:
++    """Return ``linha 9`` / ``linhas 3 e 9`` / ``linhas 3, 5 e 9``; empty for no lines."""
++    if not lines:
++        return ""
++    if len(lines) == 1:
++        return f"linha {lines[0]}"
++    leading = ", ".join(str(line_number) for line_number in lines[:-1])
++    return f"linhas {leading} e {lines[-1]}"
++
++
++def _summary_line(report: EnvReport) -> str:
++    """Return the closing summary: ``OK`` with the key count, or the error/warning tally."""
++    if not report.findings:
++        return f"OK: {report.checked_key_count} chaves conferidas, sem problemas"
++    return f"{report.error_count} erro(s), {report.warning_count} aviso(s)"
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index f1274b2..794e992 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -4,7 +4,11 @@ CliRunner is used for in-process invocation so the tests are fast and
+ capture stdout/stderr cleanly. The live-LLM path is not exercised here
+ (it is covered in :mod:`tests.test_pipeline` via direct client
+ injection); CLI coverage focuses on dry-run, error messages, and the
+-two-command help surface.
++three-command help surface.
++
++The ``env-check`` tests cover only the file/exit-code layer (case IDs
++E1, E2 and the CLI side of N1, L1, E3/E4); the parse/check/render logic
++is specified in :mod:`tests.test_envcheck`.
+ """
+ 
+ from __future__ import annotations
+@@ -18,6 +22,20 @@ from lst import __version__
+ from lst.cli import app
+ 
+ _FIXTURE = Path(__file__).parent / "fixtures" / "auth_sample.log"
++_EXAMPLE_PATH = Path(__file__).resolve().parent.parent / ".env.example"
++
++_FULL_ENV = (
++    "LLM_API_KEY=fake-key\n"
++    "LLM_MODEL=fake-model\n"
++    "LLM_BASE_URL=http://fake\n"
++    "LLM_TIMEOUT_SECONDS=fake-timeout\n"
++    "LLM_MAX_RETRIES=fake-retries\n"
++    "LLM_MAX_TOKENS=fake-tokens\n"
++    "LLM_STRUCTURED_MODE=fake-mode\n"
++    "LLM_PARSE_RETRIES=fake-parse-retries\n"
++)
++
++_SENTINEL = "VALOR-QUE-NAO-PODE-VAZAR"
+ 
+ 
+ @pytest.fixture
+@@ -98,3 +116,129 @@ def test_cli_help_lists_commands(runner: CliRunner) -> None:
+     normalised = " ".join(result.stdout.split())
+     assert "scan" in normalised
+     assert "version" in normalised
++
++
++# --- env-check ----------------------------------------------------------------
++
++
++def test_cli_help_lists_env_check(runner: CliRunner) -> None:
++    """Top-level ``--help`` surfaces the additive ``env-check`` command."""
++    invocation = runner.invoke(app, ["--help"])
++    assert invocation.exit_code == 0
++    assert "env-check" in " ".join(invocation.stdout.split())
++
++
++def _write_contract(directory: Path) -> Path:
++    """Copy the real ``.env.example`` into ``directory`` and return its path."""
++    contract_path = directory / ".env.example"
++    contract_path.write_text(_EXAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
++    return contract_path
++
++
++def test_n1_env_check_cli_reports_ok_and_exits_0(
++    runner: CliRunner,
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """Default paths in the current directory: a complete .env prints the OK summary."""
++    monkeypatch.chdir(tmp_path)
++    _write_contract(tmp_path)
++    (tmp_path / ".env").write_text(_FULL_ENV, encoding="utf-8")
++
++    invocation = runner.invoke(app, ["env-check"])
++
++    assert invocation.exit_code == 0, invocation.stderr
++    assert invocation.stdout.strip() == "OK: 8 chaves conferidas, sem problemas"
++
++
++def test_l1_env_check_cli_exits_1_on_error_finding(
++    runner: CliRunner,
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """``--env`` / ``--example`` select the files; an empty required key is exit 1."""
++    monkeypatch.chdir(tmp_path)
++    contract_path = _write_contract(tmp_path)
++    env_path = tmp_path / "local.env"
++    env_path.write_text("LLM_API_KEY=\n", encoding="utf-8")
++
++    invocation = runner.invoke(
++        app,
++        ["env-check", "--env", str(env_path), "--example", str(contract_path)],
++    )
++
++    assert invocation.exit_code == 1
++    assert "[ERRO] LLM_API_KEY" in invocation.stdout
++    assert "1 erro(s), 0 aviso(s)" in invocation.stdout
++
++
++def test_e1_env_check_cli_missing_env_file_is_exit_2(
++    runner: CliRunner,
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """No ``.env`` in the current directory -> pt-BR error on stderr, exit 2."""
++    monkeypatch.chdir(tmp_path)
++    _write_contract(tmp_path)
++
++    invocation = runner.invoke(app, ["env-check"])
++
++    assert invocation.exit_code == 2
++    assert "Erro: arquivo não encontrado: .env" in invocation.stderr
++    assert invocation.stdout == ""
++
++
++def test_e2_env_check_cli_missing_example_file_is_exit_2(
++    runner: CliRunner,
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """No ``.env.example`` in the current directory -> pt-BR error on stderr, exit 2."""
++    monkeypatch.chdir(tmp_path)
++    (tmp_path / ".env").write_text(_FULL_ENV, encoding="utf-8")
++
++    invocation = runner.invoke(app, ["env-check"])
++
++    assert invocation.exit_code == 2
++    assert "Erro: arquivo não encontrado: .env.example" in invocation.stderr
++    assert invocation.stdout == ""
++
++
++def test_e1_env_check_cli_unreadable_env_file_is_exit_2_without_traceback(
++    runner: CliRunner,
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """A .env that is not UTF-8 is a pt-BR read error (exit 2), never a traceback."""
++    monkeypatch.chdir(tmp_path)
++    _write_contract(tmp_path)
++    (tmp_path / ".env").write_bytes(b"LLM_API_KEY=\xff\xfe\n")
++
++    invocation = runner.invoke(app, ["env-check"])
++
++    assert invocation.exit_code == 2
++    assert "Erro: não foi possível ler o arquivo: .env" in invocation.stderr
++    assert not isinstance(invocation.exception, Exception)
++    assert "Traceback" not in invocation.stdout + invocation.stderr
++
++
++def test_e3_e4_env_check_cli_never_prints_values_or_keyless_lines(
++    runner: CliRunner,
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++) -> None:
++    """Sentinel values, a legacy alias, an unknown key and a keyless line: none is echoed."""
++    monkeypatch.chdir(tmp_path)
++    _write_contract(tmp_path)
++    env_lines = [f"{line.split('=', 1)[0]}={_SENTINEL}" for line in _FULL_ENV.splitlines()]
++    env_lines += [f"OLLAMA_API_KEY={_SENTINEL}", f"LST_HTTP_TIMEOUT={_SENTINEL}", _SENTINEL]
++    (tmp_path / ".env").write_text("\n".join(env_lines) + "\n", encoding="utf-8")
++
++    invocation = runner.invoke(app, ["env-check"])
++
++    assert invocation.exit_code == 0, invocation.stderr
++    assert "[AVISO] linha 11: malformada (ignorada)" in invocation.stdout
++    assert "[AVISO] LST_HTTP_TIMEOUT: chave desconhecida (linha 10)" in invocation.stdout
++    assert "0 erro(s), 3 aviso(s)" in invocation.stdout
++    assert _SENTINEL not in invocation.stdout
++    assert _SENTINEL not in invocation.stderr
+diff --git a/tests/test_envcheck.py b/tests/test_envcheck.py
+new file mode 100644
+index 0000000..4ebae76
+--- /dev/null
++++ b/tests/test_envcheck.py
+@@ -0,0 +1,420 @@
++"""Unit tests for :mod:`lst.envcheck` -- the pure parse / check / render steps.
++
++Every test name carries the case ID from the task contract (N1-N2, L1-L7,
++E1-E4). Tests that pin a variation of a case (alias precedence, findings in
++the example file) reuse the nearest ID with a descriptive suffix. The file
++I/O and exit-code layer is covered in :mod:`tests.test_cli`.
++
++Values in every ``.env`` text below are ``fake-`` placeholders; the E4 test
++uses the sentinel from the task to prove no value ever reaches the output.
++"""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import pytest
++from pydantic import AliasChoices
++
++from lst.config import Settings
++from lst.envcheck import (
++    CheckedFile,
++    EnvFinding,
++    FindingKind,
++    FindingSeverity,
++    check_env,
++    parse_dotenv,
++    render_report,
++)
++
++_EXAMPLE_PATH = Path(__file__).resolve().parent.parent / ".env.example"
++
++_CONTRACT_KEYS = (
++    "LLM_API_KEY",
++    "LLM_MODEL",
++    "LLM_BASE_URL",
++    "LLM_TIMEOUT_SECONDS",
++    "LLM_MAX_RETRIES",
++    "LLM_MAX_TOKENS",
++    "LLM_STRUCTURED_MODE",
++    "LLM_PARSE_RETRIES",
++)
++
++_FULL_ENV = "\n".join(f"{key}=fake-{key.lower()}" for key in _CONTRACT_KEYS) + "\n"
++
++_LEGACY_ENV = "OLLAMA_API_KEY=fake-key\nOLLAMA_MODEL=fake-model\nOLLAMA_BASE_URL=http://fake\n"
++
++_SENTINEL = "VALOR-QUE-NAO-PODE-VAZAR"
++
++
++@pytest.fixture
++def example_text() -> str:
++    """Return the real, versioned ``.env.example`` -- the contract under test."""
++    return _EXAMPLE_PATH.read_text(encoding="utf-8")
++
++
++def _kinds(findings: tuple[EnvFinding, ...]) -> list[FindingKind]:
++    """Return the kinds of ``findings`` in report order."""
++    return [finding.kind for finding in findings]
++
++
++# --- Normal -----------------------------------------------------------------
++
++
++def test_n1_full_llm_env_matches_contract_without_findings(example_text: str) -> None:
++    """All 8 LLM_* keys filled -> no findings, 8 keys checked, OK summary."""
++    report = check_env(example_text, _FULL_ENV)
++
++    assert report.findings == ()
++    assert report.checked_key_count == 8
++    assert report.ok is True
++    assert render_report(report) == "OK: 8 chaves conferidas, sem problemas"
++
++
++def test_n1_parse_dotenv_skips_blank_and_comment_lines(example_text: str) -> None:
++    """The real example parses to exactly the 8 contract keys, in file order."""
++    parsed = parse_dotenv(example_text)
++
++    assert tuple(entry.key for entry in parsed.entries) == _CONTRACT_KEYS
++    assert parsed.malformed_lines == ()
++
++    api_key_entry = parsed.find("LLM_API_KEY")
++    model_entry = parsed.find("LLM_MODEL")
++    assert api_key_entry is not None and api_key_entry.is_empty is True
++    assert model_entry is not None and model_entry.is_empty is False
++
++
++def test_n2_legacy_aliases_satisfy_canonical_keys_with_warnings(example_text: str) -> None:
++    """A v1.0.0 .env (OLLAMA_* only) yields 3 legacy warnings and zero errors."""
++    report = check_env(example_text, _LEGACY_ENV)
++
++    assert _kinds(report.findings) == [FindingKind.LEGACY] * 3
++    assert all(finding.severity is FindingSeverity.WARNING for finding in report.findings)
++    assert report.error_count == 0
++    assert report.ok is True
++
++    rendered = render_report(report)
++    assert "[AVISO] OLLAMA_API_KEY: nome legado — prefira LLM_API_KEY" in rendered
++    assert "[AVISO] OLLAMA_MODEL: nome legado — prefira LLM_MODEL" in rendered
++    assert "[AVISO] OLLAMA_BASE_URL: nome legado — prefira LLM_BASE_URL" in rendered
++    assert rendered.endswith("0 erro(s), 3 aviso(s)")
++
++
++def test_n2_legacy_alias_table_mirrors_settings_aliases(example_text: str) -> None:
++    """Every AliasChoices pair in Settings is recognised as legacy -> canonical."""
++    alias_pairs = [
++        field.validation_alias.choices
++        for field in Settings.model_fields.values()
++        if isinstance(field.validation_alias, AliasChoices)
++    ]
++    assert len(alias_pairs) == 3
++
++    for canonical, legacy in alias_pairs:
++        report = check_env(example_text, f"LLM_API_KEY=fake-key\n{legacy}=fake-value\n")
++
++        assert _kinds(report.findings) == [FindingKind.LEGACY], legacy
++        assert f"prefira {canonical}" in render_report(report)
++
++
++def test_n2_alias_with_empty_value_is_missing_and_legacy(example_text: str) -> None:
++    """An empty legacy alias does not satisfy the required key: missing + legacy."""
++    report = check_env(example_text, "OLLAMA_API_KEY=\n")
++
++    assert _kinds(report.findings) == [FindingKind.MISSING, FindingKind.LEGACY]
++    assert report.ok is False
++    assert render_report(report).endswith("1 erro(s), 1 aviso(s)")
++
++
++def test_n2_canonical_key_takes_precedence_over_legacy_alias(example_text: str) -> None:
++    """Like Settings' AliasChoices, an empty LLM_API_KEY wins over a filled OLLAMA_API_KEY."""
++    report = check_env(example_text, "LLM_API_KEY=\nOLLAMA_API_KEY=fake-key\n")
++
++    assert _kinds(report.findings) == [FindingKind.MISSING, FindingKind.LEGACY]
++    assert report.ok is False
++
++
++# --- Limits -----------------------------------------------------------------
++
++
++def test_l1_required_key_with_empty_value_is_missing_error(example_text: str) -> None:
++    """``LLM_API_KEY=`` counts as missing (error) and cites its line."""
++    report = check_env(example_text, "LLM_API_KEY=\n")
++
++    assert len(report.findings) == 1
++    finding = report.findings[0]
++    assert finding.kind is FindingKind.MISSING
++    assert finding.severity is FindingSeverity.ERROR
++    assert finding.key == "LLM_API_KEY"
++    assert finding.lines == (1,)
++    assert report.ok is False
++
++    rendered = render_report(report)
++    assert "[ERRO] LLM_API_KEY: obrigatória e vazia (linha 1)" in rendered
++    assert rendered.endswith("1 erro(s), 0 aviso(s)")
++
++
++def test_l2_unknown_key_is_warning_with_line(example_text: str) -> None:
++    """A dead variable such as LST_HTTP_TIMEOUT is an unknown-key warning, exit stays OK."""
++    report = check_env(example_text, _FULL_ENV + "LST_HTTP_TIMEOUT=30\n")
++
++    assert len(report.findings) == 1
++    finding = report.findings[0]
++    assert finding.kind is FindingKind.UNKNOWN
++    assert finding.severity is FindingSeverity.WARNING
++    assert finding.key == "LST_HTTP_TIMEOUT"
++    assert finding.lines == (9,)
++    assert report.ok is True
++    assert "[AVISO] LST_HTTP_TIMEOUT: chave desconhecida (linha 9)" in render_report(report)
++
++
++def test_l3_export_prefix_and_enclosing_quotes_are_accepted(example_text: str) -> None:
++    """``export KEY="value"`` parses to the bare key; quotes wrap the value; no findings."""
++    parsed = parse_dotenv("export LLM_MODEL=\"fake-model\"\nexport LLM_BASE_URL=''\n")
++
++    assert [(entry.key, entry.is_empty) for entry in parsed.entries] == [
++        ("LLM_MODEL", False),
++        ("LLM_BASE_URL", True),
++    ]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, 'LLM_API_KEY=fake-key\nexport LLM_MODEL="fake-model"\n')
++    assert report.findings == ()
++
++
++def test_l3_export_followed_by_tabs_is_accepted(example_text: str) -> None:
++    """Rule 2 clarified: ``export`` may be followed by any run of spaces or tabs."""
++    parsed = parse_dotenv("export\tLLM_MODEL=fake-model\nexport \t LLM_BASE_URL=http://fake\n")
++
++    assert [entry.key for entry in parsed.entries] == ["LLM_MODEL", "LLM_BASE_URL"]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, "export\tLLM_API_KEY=fake-key\n")
++    assert report.findings == ()
++
++
++def test_l4_optional_key_with_empty_value_is_empty_error(example_text: str) -> None:
++    """``LLM_MODEL=`` is an error: Settings rejects the empty string instead of defaulting."""
++    report = check_env(example_text, "LLM_API_KEY=fake-key\nLLM_MODEL=\n")
++
++    assert len(report.findings) == 1
++    finding = report.findings[0]
++    assert finding.kind is FindingKind.EMPTY
++    assert finding.severity is FindingSeverity.ERROR
++    assert finding.key == "LLM_MODEL"
++    assert finding.lines == (2,)
++    assert report.ok is False
++    assert "[ERRO] LLM_MODEL: vazia" in render_report(report)
++    assert "(linha 2)" in render_report(report)
++
++
++def test_l5_duplicate_key_warns_with_both_lines_and_last_wins(example_text: str) -> None:
++    """A key on two lines is one duplicate warning citing both; the last value is effective."""
++    parsed = parse_dotenv("LLM_API_KEY=fake-first\n\nLLM_API_KEY=\n")
++
++    assert len(parsed.entries) == 1
++    assert parsed.entries[0].is_empty is True  # the last (empty) occurrence wins
++    assert parsed.entries[0].lines == (1, 3)
++
++    report = check_env(example_text, "LLM_API_KEY=fake-first\n\nLLM_API_KEY=fake-last\n")
++    assert len(report.findings) == 1
++    finding = report.findings[0]
++    assert finding.kind is FindingKind.DUPLICATE
++    assert finding.severity is FindingSeverity.WARNING
++    assert finding.key == "LLM_API_KEY"
++    assert finding.lines == (1, 3)
++    assert report.ok is True
++    assert "[AVISO] LLM_API_KEY: chave repetida (linhas 1 e 3) — a última vale" in render_report(
++        report
++    )
++
++
++def test_l5_duplicate_key_in_example_file_is_reported_with_file_label() -> None:
++    """A repeated key in the contract file itself is a warning naming that file."""
++    contract_with_duplicate = "LLM_API_KEY=\nLLM_MODEL=\nLLM_MODEL=fake-model\n"
++    report = check_env(contract_with_duplicate, "LLM_API_KEY=fake-key\n")
++
++    assert _kinds(report.findings) == [FindingKind.DUPLICATE]
++    finding = report.findings[0]
++    assert finding.file is CheckedFile.EXAMPLE
++    assert finding.key == "LLM_MODEL"
++    assert finding.lines == (2, 3)
++    assert report.checked_key_count == 2  # the last definition wins: LLM_MODEL is optional
++    assert (
++        "[AVISO] LLM_MODEL: chave repetida no arquivo de exemplo (linhas 2 e 3) — a última vale"
++        in render_report(report)
++    )
++
++
++def test_l6_empty_env_yields_exactly_one_missing_for_the_api_key(example_text: str) -> None:
++    """A 0-byte .env has one finding only: LLM_API_KEY is the sole required key."""
++    report = check_env(example_text, "")
++
++    assert len(report.findings) == 1
++    finding = report.findings[0]
++    assert finding.kind is FindingKind.MISSING
++    assert finding.key == "LLM_API_KEY"
++    assert finding.lines == ()
++    assert report.ok is False
++
++    rendered = render_report(report)
++    assert "[ERRO] LLM_API_KEY: obrigatória e ausente" in rendered
++    assert rendered.endswith("1 erro(s), 0 aviso(s)")
++
++
++def test_l7_key_lookup_is_case_insensitive(example_text: str) -> None:
++    """``llm_api_key=...`` satisfies LLM_API_KEY, mirroring case_sensitive=False in Settings."""
++    report = check_env(example_text, "llm_api_key=fake-key\n")
++
++    assert report.findings == ()
++    assert report.ok is True
++
++
++def test_l7_unknown_key_keeps_its_original_spelling(example_text: str) -> None:
++    """Rule 5: comparison ignores case, but the output shows the key as written."""
++    report = check_env(example_text, "lst_http_timeout=1\nLLM_API_KEY=fake-key\n")
++
++    assert "[AVISO] lst_http_timeout: chave desconhecida (linha 1)" in render_report(report)
++
++
++def test_l8_spaces_and_tabs_around_equals_are_accepted(example_text: str) -> None:
++    """Rule 3 clarified: ``KEY = value`` (spaces or tabs around ``=``) is a normal line."""
++    parsed = parse_dotenv("LLM_MODEL\t=\tfake-model\nLLM_BASE_URL =\n")
++
++    assert [(entry.key, entry.is_empty) for entry in parsed.entries] == [
++        ("LLM_MODEL", False),
++        ("LLM_BASE_URL", True),
++    ]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, "LLM_API_KEY = fake-key\n")
++    assert report.findings == ()
++    assert report.ok is True
++
++
++def test_l9_leading_utf8_bom_is_discarded(example_text: str) -> None:
++    """A UTF-8 BOM before the first key is ignored, as python-dotenv does."""
++    parsed = parse_dotenv("\ufeffLLM_API_KEY=fake-key\n")
++
++    assert [entry.key for entry in parsed.entries] == ["LLM_API_KEY"]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, "\ufeffLLM_API_KEY=fake-key\n")
++    assert report.findings == ()
++
++
++def test_l10_quoted_value_followed_by_comment_is_accepted(example_text: str) -> None:
++    """``KEY="value" # comment``: the quoted value counts, the comment is ignored."""
++    parsed = parse_dotenv('LLM_MODEL="fake-model" # comentário\n')
++
++    assert [(entry.key, entry.is_empty) for entry in parsed.entries] == [("LLM_MODEL", False)]
++    assert parsed.malformed_lines == ()
++
++    report = check_env(example_text, 'LLM_API_KEY=fake-key\nLLM_MODEL="fake-model" # comentário\n')
++    assert report.findings == ()
++
++
++# --- Errors -----------------------------------------------------------------
++
++
++def test_e3_line_without_key_is_malformed_by_number_only(example_text: str) -> None:
++    """A keyless line is a warning that cites the line number and never its content."""
++    env_text = "LLM_API_KEY=fake-key\nfake-secret-without-key\n"
++    parsed = parse_dotenv(env_text)
++
++    assert parsed.malformed_lines == (2,)
++    assert [entry.key for entry in parsed.entries] == ["LLM_API_KEY"]
++
++    report = check_env(example_text, env_text)
++    assert len(report.findings) == 1
++    finding = report.findings[0]
++    assert finding.kind is FindingKind.MALFORMED
++    assert finding.severity is FindingSeverity.WARNING
++    assert finding.key is None
++    assert finding.lines == (2,)
++    assert report.ok is True
++
++    rendered = render_report(report)
++    assert "[AVISO] linha 2: malformada (ignorada)" in rendered
++    assert "fake-secret-without-key" not in rendered
++    assert "fake-secret-without-key" not in repr(report)
++    assert "fake-secret-without-key" not in repr(parsed)
++
++
++def test_e3_malformed_line_in_example_file_is_reported_with_file_label() -> None:
++    """A broken line in the contract file is a warning naming that file, not silence."""
++    contract_with_junk = "LLM_API_KEY=\nfake-secret-without-key\n"
++    report = check_env(contract_with_junk, "LLM_API_KEY=fake-key\n")
++
++    assert _kinds(report.findings) == [FindingKind.MALFORMED]
++    finding = report.findings[0]
++    assert finding.file is CheckedFile.EXAMPLE
++    assert finding.lines == (2,)
++
++    rendered = render_report(report)
++    assert "[AVISO] linha 2 do arquivo de exemplo: malformada (ignorada)" in rendered
++    assert "fake-secret-without-key" not in rendered
++
++
++def test_e4_report_and_rendering_never_contain_values(example_text: str) -> None:
++    """With the sentinel in every key, alias, duplicate and keyless line, it never surfaces."""
++    env_lines = [f"{key}={_SENTINEL}" for key in _CONTRACT_KEYS]
++    env_lines += [f"{alias}={_SENTINEL}" for alias in ("OLLAMA_API_KEY", "OLLAMA_MODEL")]
++    env_lines += [f"LLM_API_KEY='{_SENTINEL}'", f"LST_HTTP_TIMEOUT={_SENTINEL}", _SENTINEL]
++    env_text = "\n".join(env_lines) + "\n"
++    report = check_env(example_text, env_text)
++
++    assert sorted(_kinds(report.findings)) == sorted(
++        [
++            FindingKind.LEGACY,
++            FindingKind.LEGACY,
++            FindingKind.UNKNOWN,
++            FindingKind.DUPLICATE,
++            FindingKind.MALFORMED,
++        ]
++    )
++    assert _SENTINEL not in render_report(report)
++    assert _SENTINEL not in repr(report)
++    assert _SENTINEL not in repr(parse_dotenv(env_text))
++
++
++def test_e5_unclosed_quote_is_malformed_and_key_counts_as_absent(example_text: str) -> None:
++    """``KEY="value`` (no closing quote) is malformed: line number only, key absent."""
++    env_text = 'LLM_API_KEY="fake-key\n'
++    parsed = parse_dotenv(env_text)
++
++    assert parsed.entries == ()
++    assert parsed.malformed_lines == (1,)
++
++    report = check_env(example_text, env_text)
++    assert _kinds(report.findings) == [FindingKind.MISSING, FindingKind.MALFORMED]
++    assert report.findings[0].lines == ()
++    assert report.findings[1].lines == (1,)
++    assert report.ok is False
++
++    rendered = render_report(report)
++    assert "[ERRO] LLM_API_KEY: obrigatória e ausente" in rendered
++    assert "[AVISO] linha 1: malformada (ignorada)" in rendered
++    assert rendered.endswith("1 erro(s), 1 aviso(s)")
++    assert "fake-key" not in rendered
++    assert "fake-key" not in repr(report)
++    assert "fake-key" not in repr(parsed)
++
++
++def test_e5_text_after_closing_quote_is_malformed() -> None:
++    """Only spaces or a ``#`` comment may follow a closing quote; anything else is malformed."""
++    parsed = parse_dotenv('LLM_MODEL="fake-model" extra\nLLM_BASE_URL="a"b"\n')
++
++    assert parsed.entries == ()
++    assert parsed.malformed_lines == (1, 2)
++
++
++def test_e6_empty_quoted_value_with_comment_is_missing_with_line(example_text: str) -> None:
++    """``KEY="" # comment`` is an empty value: a required key is missing, citing the line."""
++    report = check_env(example_text, 'LLM_API_KEY="" # preencha\n')
++
++    assert len(report.findings) == 1
++    finding = report.findings[0]
++    assert finding.kind is FindingKind.MISSING
++    assert finding.lines == (1,)
++    assert report.ok is False
++    assert "[ERRO] LLM_API_KEY: obrigatória e vazia (linha 1)" in render_report(report)
