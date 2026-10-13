@@ -1,0 +1,1008 @@
+{
+ "P0": [
+  {
+   "teste": "test_401_aborta_sem_retentar",
+   "classe": "4XX",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_429_retenta_respeitando_retry_after",
+   "classe": "TRANS",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_429_persistente_esgota_retentativas_e_aborta",
+   "classe": "TRANS",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_5xx_transitorio_e_retentado_com_backoff",
+   "classe": "TRANS",
+   "doc": "",
+   "res": {
+    "falhou": 3
+   }
+  },
+  {
+   "teste": "test_5xx_persistente_esgota_retentativas_e_aborta",
+   "classe": "TRANS",
+   "doc": "",
+   "res": {
+    "falhou": 3
+   }
+  },
+  {
+   "teste": "test_timeout_transitorio_e_retentado",
+   "classe": "TRANS",
+   "doc": "",
+   "res": {
+    "falhou": 2
+   }
+  },
+  {
+   "teste": "test_timeout_persistente_esgota_retentativas_e_aborta",
+   "classe": "REDE",
+   "doc": "",
+   "res": {
+    "falhou": 2
+   }
+  },
+  {
+   "teste": "test_200_invalido_falha_de_forma_controlada",
+   "classe": "CFGINV",
+   "doc": "",
+   "res": {
+    "falhou": 2
+   }
+  },
+  {
+   "teste": "test_envia_uma_requisicao_por_evento_suspeito",
+   "classe": "REQ",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_requisicao_segue_o_contrato_de_chat_completions",
+   "classe": "REQ",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_timeout_configurado_chega_ao_cliente_http",
+   "classe": "REDE",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_explicacao_de_cada_evento_chega_a_saida",
+   "classe": "REQ",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_linhas_benignas_nao_saem_para_o_provedor",
+   "classe": "DADOS",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_log_sem_eventos_suspeitos_nao_chama_a_api",
+   "classe": "CLI",
+   "doc": "",
+   "res": {
+    "falhou": 1
+   }
+  }
+ ],
+ "P1 v1": [
+  {
+   "teste": "test_um_post_por_evento_com_bearer_modelo_mensagens_e_max_tokens",
+   "classe": "CFG",
+   "doc": "Cada evento marcado gera um POST em /chat/completions com Bearer, modelo padrão, system+user e max_tokens padrão.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_chave_da_api_nunca_vai_no_corpo_nem_na_url",
+   "classe": "DADOS",
+   "doc": "A chave da API trafega só no cabeçalho Authorization, nunca no corpo JSON nem na URL.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_somente_template_e_amostras_limitadas_saem_da_maquina",
+   "classe": "DADOS",
+   "doc": "Cada requisição leva no máximo 3 linhas originais do log e no máximo 3 IPs de amostra fora delas.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_modelo_configurado_vai_no_campo_model",
+   "classe": "CFG",
+   "doc": "O valor de LLM_MODEL é enviado no campo model de todas as requisições.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_max_tokens_nos_limites_vai_no_corpo",
+   "classe": "CFGINV",
+   "doc": "LLM_MAX_TOKENS (padrão e limites da faixa) é enviado como max_tokens.",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_timeout_configurado_vale_para_cada_chamada",
+   "classe": "REDE",
+   "doc": "LLM_TIMEOUT_SECONDS é aplicado como timeout de leitura de cada chamada HTTP ao provedor.",
+   "res": {
+    "passou": 1,
+    "falhou": 2
+   }
+  },
+  {
+   "teste": "test_base_url_padrao_aponta_para_ollama_cloud",
+   "classe": "CFG",
+   "doc": "Sem LLM_BASE_URL, o LST chama https://ollama.com/v1/chat/completions.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_base_url_personalizada_com_caminho",
+   "classe": "CFG",
+   "doc": "Com LLM_BASE_URL de outro provedor, o endpoint chamado é {LLM_BASE_URL}/chat/completions.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_response_format_enviado_conforme_modo",
+   "classe": "CFG",
+   "doc": "O response_format enviado segue LLM_STRUCTURED_MODE quando o provedor aceita a primeira tentativa.",
+   "res": {
+    "passou": 5
+   }
+  },
+  {
+   "teste": "test_json_schema_declara_triage_explanation_estrito_com_tres_campos",
+   "classe": "CFG",
+   "doc": "No modo json_schema o response_format declara triage_explanation, strict=true e os três campos obrigatórios.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_severidades_validas_sao_aceitas_sem_nova_requisicao",
+   "classe": "OK200",
+   "doc": "Cada severity da lista, inclusive com maiúsculas (normalizada pelo LST), é aceita na primeira resposta.",
+   "res": {
+    "passou": 8
+   }
+  },
+  {
+   "teste": "test_conteudo_valido_em_formatos_tolerados_entra_no_relatorio",
+   "classe": "OK200",
+   "doc": "JSON válido com cerca markdown ou texto antes/depois é aceito e a explicação em pt-BR entra no relatório.",
+   "res": {
+    "passou": 7
+   }
+  },
+  {
+   "teste": "test_conteudo_invalido_em_200_vira_evento_nao_explicado",
+   "classe": "CFGINV",
+   "doc": "Conteúdo 200 vazio, não-JSON, sem campo obrigatório ou com severity inválida é listado como não explicado.",
+   "res": {
+    "passou": 14
+   }
+  },
+  {
+   "teste": "test_corpo_200_fora_do_formato_chat_completion_vira_evento_nao_explicado",
+   "classe": "MAL200",
+   "doc": "Corpo 200 sem choices, vazio, HTML ou com erro embutido não derruba a triagem e o evento é listado.",
+   "res": {
+    "falhou": 5,
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_resposta_invalida_persistente_esgota_parse_retries",
+   "classe": "CFGINV",
+   "doc": "200 inválido persistente gera 1 + LLM_PARSE_RETRIES requisições por evento e o relatório sai normalmente.",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_resposta_invalida_recupera_na_ultima_nova_requisicao",
+   "classe": "CFGINV",
+   "doc": "Exatamente LLM_PARSE_RETRIES respostas 200 vazias seguidas de uma válida: o evento é explicado.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_resposta_invalida_uma_vez_alem_do_limite_isola_so_o_evento_afetado",
+   "classe": "CFGINV",
+   "doc": "LLM_PARSE_RETRIES + 1 respostas inválidas no 1º evento: só ele fica não explicado e os demais são explicados.",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_modo_auto_degrada_de_json_schema_para_json_object",
+   "classe": "CASC",
+   "doc": "Modo auto: 400 por response_format em json_schema leva a nova tentativa com json_object e o evento é explicado.",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_modo_auto_degrada_ate_requisicao_sem_response_format",
+   "classe": "CASC",
+   "doc": "Modo auto: 400 por response_format em json_schema e em json_object leva a uma requisição sem response_format.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_modo_auto_400_apos_degradacao_completa_propaga_erro",
+   "classe": "CASC",
+   "doc": "Modo auto: se a requisição já sem response_format também recebe 400, o erro é propagado após 3 chamadas.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_modo_fixado_nao_degrada_400_de_response_format",
+   "classe": "CASC",
+   "doc": "Com LLM_STRUCTURED_MODE fixado, 400 por response_format vira erro sem tentar outro formato.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_falhas_transitorias_sao_repetidas_ate_o_sucesso",
+   "classe": "TRANS",
+   "doc": "429 e 5xx (corpo JSON, HTML, texto ou vazio) são repetidos automaticamente com o mesmo corpo e o evento é explicado.",
+   "res": {
+    "passou": 6
+   }
+  },
+  {
+   "teste": "test_falhas_transitorias_alem_do_limite_padrao_propagam_erro",
+   "classe": "TRANS",
+   "doc": "Com o padrão LLM_MAX_RETRIES=2, falha transitória persistente encerra com erro após exatamente 3 chamadas.",
+   "res": {
+    "passou": 6
+   }
+  },
+  {
+   "teste": "test_503_persistente_faz_exatamente_1_mais_max_retries_chamadas",
+   "classe": "TRANS",
+   "doc": "503 persistente: o LST faz 1 + LLM_MAX_RETRIES chamadas (limites 0 e 5) e então propaga o erro.",
+   "res": {
+    "passou": 4
+   }
+  },
+  {
+   "teste": "test_503_recupera_na_ultima_tentativa_permitida",
+   "classe": "TRANS",
+   "doc": "Exatamente LLM_MAX_RETRIES respostas 503 seguidas de 200 válido: o evento é explicado normalmente.",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_erros_4xx_nao_sao_repetidos_nem_degradam",
+   "classe": "CASC",
+   "doc": "4xx não transitórios (400 por outro motivo, 401, 403, 404, 422) são propagados após uma única chamada.",
+   "res": {
+    "passou": 10
+   }
+  },
+  {
+   "teste": "test_pipeline_propaga_timeout_do_provedor",
+   "classe": "REDE",
+   "doc": "Um timeout de leitura na chamada ao LLM é propagado por run_pipeline como exceção.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_settings_aceita_limites_da_faixa_vindos_do_ambiente",
+   "classe": "CFGINV",
+   "doc": "Valores nos limites das faixas, lidos de variáveis de ambiente, são aceitos sem alteração.",
+   "res": {
+    "passou": 12
+   }
+  },
+  {
+   "teste": "test_settings_rejeita_valores_fora_da_faixa",
+   "classe": "CFGINV",
+   "doc": "Valores logo fora das faixas documentadas ou de tipo inválido são rejeitados na validação.",
+   "res": {
+    "passou": 10
+   }
+  },
+  {
+   "teste": "test_settings_com_env_file_none_ignora_dotenv_local",
+   "classe": "CFG",
+   "doc": "Settings(_env_file=None) ignora um .env no diretório atual e envia os valores padrão ao provedor.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_gera_relatorio_markdown_no_stdout",
+   "classe": "CLI",
+   "doc": "Com o provedor respondendo 200 válido, a CLI sai com 0 e imprime o relatório com os 3 eventos explicados.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_sai_com_0_mesmo_com_eventos_nao_explicados",
+   "classe": "INV200",
+   "doc": "Respostas 200 inválidas persistentes não derrubam a CLI: código 0 e seção de eventos não explicados.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_aceita_configuracao_nos_limites_e_reflete_na_requisicao",
+   "classe": "CFGINV",
+   "doc": "A CLI aceita todas as variáveis nos limites da faixa e as reflete nas requisições ao provedor.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_cli_configuracao_invalida_sai_com_1_sem_chamar_provedor",
+   "classe": "CFGINV",
+   "doc": "Configuração fora da faixa faz a CLI sair com código 1, mensagem no stderr, sem traceback e sem requisições.",
+   "res": {
+    "passou": 10
+   }
+  },
+  {
+   "teste": "test_cli_sem_chave_sai_com_1_sem_chamar_provedor",
+   "classe": "CLI",
+   "doc": "Sem LLM_API_KEY (ausente ou vazia) a CLI sai com código 1, mensagem no stderr e zero requisições.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_cli_chave_invalida_ou_expirada_sai_com_erro_de_autenticacao",
+   "classe": "CFGINV",
+   "doc": "HTTP 401 do provedor, em qualquer formato de corpo, vira código 1 com erro de autenticação e sem novas tentativas.",
+   "res": {
+    "passou": 6
+   }
+  },
+  {
+   "teste": "test_cli_timeout_do_modelo_sai_com_1",
+   "classe": "REDE",
+   "doc": "Quando o modelo excede LLM_TIMEOUT_SECONDS, a CLI sai com código 1 e 'Timeout ao consultar o LLM'.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_arquivo_de_log_inexistente_sai_com_2",
+   "classe": "CLI",
+   "doc": "Arquivo de log inexistente gera código 2, a mensagem documentada e nenhuma requisição ao provedor.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_dry_run_nao_chama_provedor_e_dispensa_chave",
+   "classe": "CLI",
+   "doc": "lst scan --dry-run termina com código 0 sem nenhuma requisição ao provedor, com ou sem LLM_API_KEY.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_cli_le_configuracao_do_dotenv_do_diretorio_atual",
+   "classe": "CFG",
+   "doc": "Sem variáveis de ambiente, a CLI usa a chave, a URL e o modelo definidos no .env do diretório atual.",
+   "res": {
+    "passou": 1
+   }
+  }
+ ],
+ "P2 v1": [
+  {
+   "teste": "test_settings_reject_values_outside_documented_range",
+   "classe": "CFGINV",
+   "doc": "Regra: faixas da configuração — valor fora de [mín, máx] ou fora do domínio é rejeitado.",
+   "res": {
+    "passou": 9
+   }
+  },
+  {
+   "teste": "test_settings_accept_closed_range_limits",
+   "classe": "CFGINV",
+   "doc": "Regra: as faixas são fechadas — os próprios limites são aceitos (controle de borda).",
+   "res": {
+    "passou": 12
+   }
+  },
+  {
+   "teste": "test_cli_invalid_config_is_operational_error",
+   "classe": "CFGINV",
+   "doc": "Regra: erro de validação de configuração — código 1, mensagem pt-BR no stderr, sem traceback e sem nenhuma requisição ao provedor.",
+   "res": {
+    "passou": 7
+   }
+  },
+  {
+   "teste": "test_cli_validates_config_read_from_dotenv",
+   "classe": "CFG",
+   "doc": "Regra: a configuração também vem do `.env` do diretório atual e passa pela mesma validação.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_without_api_key_fails_before_any_request",
+   "classe": "REQ",
+   "doc": "Regra: LLM_API_KEY é obrigatória — código 1, mensagem documentada e zero requisições (chave vazia é tratada como ausente: um `Bearer ` vazio não pode sair da máquina).",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_cli_dry_run_skips_provider_and_key",
+   "classe": "CLI",
+   "doc": "Regra: `--dry-run` dispensa a chave e faz zero requisições (saída sugerida pelo erro de chave).",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_missing_log_file_is_usage_error",
+   "classe": "CLI",
+   "doc": "Regra: arquivo de log inexistente — código 2, \"Erro: arquivo não encontrado: ...\", sem LLM.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_invalid_api_key_is_auth_error_without_retry",
+   "classe": "CFGINV",
+   "doc": "Regra: chave inválida/expirada (401) — código 1, \"Erro de autenticação no provedor LLM: ...\"; 401 não é falha transitória: nenhuma nova tentativa, mesmo com LLM_MAX_RETRIES=5.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_key_revoked_mid_scan_stops_at_failing_event",
+   "classe": "4XX",
+   "doc": "Regra: os eventos são consultados em sequência; um 401 no 2º evento encerra a varredura com código 1 e o 3º evento não é consultado.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_llm_timeout_exits_1_with_documented_message",
+   "classe": "REDE",
+   "doc": "Regra: o modelo demorou mais que LLM_TIMEOUT_SECONDS (aqui no limite inferior, 1.0) — código 1, \"Timeout ao consultar o LLM: ...\", sem traceback.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_cli_network_failure_is_operational_error",
+   "classe": "REDE",
+   "doc": "Regra: falha de rede é erro operacional — código 1, mensagem no stderr e sem traceback (o texto não é documentado; verifica-se a saída controlada).",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_transient_http_failure_is_retried_and_event_recovered",
+   "classe": "TRANS",
+   "doc": "Regra: LLM_MAX_RETRIES cobre falhas transitórias (5xx, rate-limit); a nova tentativa bem sucedida gera o relatório completo, sem rodapé, com a chave só no cabeçalho Authorization.",
+   "res": {
+    "passou": 5
+   }
+  },
+  {
+   "teste": "test_persistent_transient_failure_stops_after_max_retries",
+   "classe": "TRANS",
+   "doc": "Regra: no máximo LLM_MAX_RETRIES novas tentativas (faixa [0, 5]); esgotadas, run_pipeline propaga a exceção — falha HTTP não vira \"evento não explicado\" (isso é só para 200 inválido).",
+   "res": {
+    "passou": 6
+   }
+  },
+  {
+   "teste": "test_non_transient_http_error_is_not_retried",
+   "classe": "4XX",
+   "doc": "Regra: só 5xx e rate-limit são transitórios — os demais 4xx não geram nova tentativa e, no modo auto, um 400 por motivo alheio a `response_format` não degrada. A exceção é propagada.",
+   "res": {
+    "passou": 5
+   }
+  },
+  {
+   "teste": "test_auto_mode_degrades_on_response_format_400",
+   "classe": "CASC",
+   "doc": "Regra: modo auto — tenta json_schema; 400 por `response_format` → json_object; de novo → sem `response_format`. O schema exige os três campos e a chave nunca vai no corpo.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_auto_mode_fails_when_last_fallback_is_also_rejected",
+   "classe": "CFGINV",
+   "doc": "Regra: o modo auto tem só três degraus; um 400 na requisição sem `response_format` é erro propagado — sem laço de novas tentativas, mesmo com LLM_MAX_RETRIES=5.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_fixed_structured_mode_turns_400_into_error",
+   "classe": "CASC",
+   "doc": "Regra: com LLM_STRUCTURED_MODE fixado não há degradação — o 400 vira erro.",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_invalid_200_reply_is_retried_then_listed_as_unexplained",
+   "classe": "CFGINV",
+   "doc": "Regra: 200 OK vazio, não-JSON, sem um campo ou com severity fora da lista → até LLM_PARSE_RETRIES novas requisições (contador separado de LLM_MAX_RETRIES); se continuar inválido, o evento vai para \"## Eventos não explicados\" e o relatório é gerado normalmente.",
+   "res": {
+    "passou": 5,
+    "falhou": 3
+   }
+  },
+  {
+   "teste": "test_parse_retries_limits_are_respected",
+   "classe": "INV200",
+   "doc": "Regra: LLM_PARSE_RETRIES ∈ [0, 3] — cada evento recebe exatamente 1 + N requisições.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_parse_retry_recovers_event_after_invalid_reply",
+   "classe": "CFGINV",
+   "doc": "Regra: a nova requisição de LLM_PARSE_RETRIES pode recuperar o evento — relatório sem rodapé.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_only_the_invalid_event_goes_to_unexplained_section",
+   "classe": "CFGINV",
+   "doc": "Regra: o evento inválido é listado em \"## Eventos não explicados\" sem afetar os demais.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_truncated_reply_at_minimum_max_tokens_becomes_unexplained",
+   "classe": "INV200",
+   "doc": "Regra: LLM_MAX_TOKENS no limite inferior (64) vai no campo `max_tokens`; o JSON cortado (finish_reason=length) é resposta inválida → evento não explicado, sem exceção.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_tolerated_formats_do_not_trigger_parse_retries",
+   "classe": "INV200",
+   "doc": "Regra (controle negativo): cercas markdown, texto ao redor e severity em maiúsculas são tolerados — não contam como resposta inválida, não geram nova requisição nem rodapé.",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_cli_exits_0_and_prints_report_with_unexplained_events",
+   "classe": "INV200",
+   "doc": "Regra: código 0 inclusive com eventos não explicados — relatório completo no stdout.",
+   "res": {
+    "passou": 1
+   }
+  }
+ ],
+ "P1 v2": [
+  {
+   "teste": "test_configuracao_padrao",
+   "classe": "CFG",
+   "doc": "[P01] Só com LLM_API_KEY: os padrões vão na requisição e o relatório traz os 3 eventos explicados.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_configuracao_pelo_dotenv",
+   "classe": "CFG",
+   "doc": "[P02] Chave, modelo e URL lidos do .env do diretório atual são aplicados na requisição.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_chave_ausente",
+   "classe": "CLI",
+   "doc": "[P03] Sem LLM_API_KEY: código 1, mensagem documentada no stderr e nenhuma requisição.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_dry_run",
+   "classe": "CLI",
+   "doc": "[P04] --dry-run não faz requisições e dispensa a chave.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_arquivo_inexistente",
+   "classe": "CLI",
+   "doc": "[P05] Log inexistente: código 2 e mensagem que nomeia o arquivo, sem requisições.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_max_tokens_nos_limites",
+   "classe": "CFG",
+   "doc": "[P06] LLM_MAX_TOKENS no mínimo e no máximo chega ao campo max_tokens.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_timeout_nos_limites",
+   "classe": "REDE",
+   "doc": "[P07] LLM_TIMEOUT_SECONDS no mínimo e no máximo vira o timeout de cada chamada.",
+   "res": {
+    "falhou": 2
+   }
+  },
+  {
+   "teste": "test_max_retries_nos_limites",
+   "classe": "TRANS",
+   "doc": "[P08] Com 503 persistente, o evento recebe exatamente 1 + LLM_MAX_RETRIES tentativas.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_parse_retries_nos_limites",
+   "classe": "INV200",
+   "doc": "[P09] Com 200 inválido persistente, cada evento recebe 1 + LLM_PARSE_RETRIES requisições e fica sem explicação.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_configuracao_invalida",
+   "classe": "CFGINV",
+   "doc": "[P10–P12] Configuração inválida: código 1, mensagem que nomeia a variável e nenhuma requisição.",
+   "res": {
+    "falhou": 10
+   }
+  },
+  {
+   "teste": "test_modo_estruturado_fixado",
+   "classe": "CFG",
+   "doc": "[P13–P15] LLM_STRUCTURED_MODE fixado define o response_format enviado (ou a ausência dele).",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_dados_enviados_ao_provedor",
+   "classe": "DADOS",
+   "doc": "[P16] Corpo com mensagens system e user, no máximo 3 linhas originais do log e sem a chave da API.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_uma_chamada_por_evento_em_sequencia",
+   "classe": "REQ",
+   "doc": "[P17] Uma requisição por evento marcado, em sequência: nunca há duas em andamento.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_run_pipeline_aplica_settings",
+   "classe": "CFG",
+   "doc": "[P18] run_pipeline devolve o Markdown e aplica modelo, URL, max_tokens e modo vindos de Settings.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_run_pipeline_propaga_excecao",
+   "classe": "CLI",
+   "doc": "[P19] run_pipeline propaga uma exceção (não encerra o processo) quando o provedor recusa a chave.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_variacoes_toleradas",
+   "classe": "OK200",
+   "doc": "[P20–P21] JSON entre cercas e texto, ou severity em maiúsculas, é aceito sem nova requisição.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_conteudo_invalido_vai_para_nao_explicados",
+   "classe": "CFGINV",
+   "doc": "[P22–P25] 200 inválido é pedido de novo (LLM_PARSE_RETRIES=1) e, persistindo, o evento vai para não explicados.",
+   "res": {
+    "passou": 4
+   }
+  },
+  {
+   "teste": "test_conteudo_invalido_seguido_de_valido",
+   "classe": "CFGINV",
+   "doc": "[P26] Após 200 inválido, a resposta válida da nova requisição é usada e o evento é explicado.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_auto_degrada_quando_response_format_nao_suportado",
+   "classe": "CASC",
+   "doc": "[P27] Modo auto: 400 por response_format degrada json_schema → json_object → sem response_format.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_auto_nao_degrada_com_400_por_outro_motivo",
+   "classe": "CASC",
+   "doc": "[P28] Modo auto: 400 sem relação com response_format não degrada nem é repetido.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_modo_fixado_nao_degrada",
+   "classe": "CASC",
+   "doc": "[P29] Modo fixado: 400 por response_format não degrada e vira erro que nomeia o status.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_chave_recusada",
+   "classe": "4XX",
+   "doc": "[P30] 401: código 1, mensagem de autenticação que nomeia a causa e nenhuma nova tentativa.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_falha_transitoria_seguida_de_sucesso",
+   "classe": "TRANS",
+   "doc": "[P31–P32] 429 ou 5xx isolado é repetido automaticamente com o mesmo corpo e o evento é explicado.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_timeout",
+   "classe": "REDE",
+   "doc": "[P33] Sem resposta no prazo: código 1 e mensagem de timeout que nomeia LLM_TIMEOUT_SECONDS.",
+   "res": {
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_respostas_nao_especificadas",
+   "classe": "MAL200",
+   "doc": "[P34–P41] Respostas fora do contrato: só o requisito da equipe (sem exceção interna; erro nomeia a causa).",
+   "res": {
+    "passou": 8
+   }
+  }
+ ],
+ "P2 v2": [
+  {
+   "teste": "test_missing_api_key_fails_before_any_request",
+   "classe": "REQ",
+   "doc": "Ponto: configuração → CLI. Regra: LLM_API_KEY é obrigatória; ausente → código 1 com a mensagem documentada e nenhuma requisição.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_invalid_setting_is_rejected_naming_the_variable",
+   "classe": "CFGINV",
+   "doc": "Ponto: configuração → CLI. Regra: faixas [1.0, 300.0], [0, 5], [0, 3], [64, 4096] e modos válidos; o primeiro valor fora (ou de tipo errado) → código 1 por validação, sem requisição.",
+   "res": {
+    "falhou": 10
+   }
+  },
+  {
+   "teste": "test_limit_values_are_accepted",
+   "classe": "CFGINV",
+   "doc": "Ponto: configuração. Regra: as faixas são fechadas; mínimo e máximo são aceitos. A aplicação de cada limite é verificada nos testes de requisição, timeout e novas tentativas.",
+   "res": {
+    "passou": 8
+   }
+  },
+  {
+   "teste": "test_missing_log_file_is_usage_error_naming_the_file",
+   "classe": "CLI",
+   "doc": "Ponto: CLI → pipeline. Regra: arquivo de log inexistente → código 2, \"Erro: arquivo não encontrado: ...\" com o arquivo nomeado, e nada é enviado ao provedor.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_dry_run_sends_nothing_and_does_not_require_key",
+   "classe": "CLI",
+   "doc": "Ponto: CLI → cliente HTTP. Regra: --dry-run não chama o provedor (zero requisições) e dispensa a chave. A saída e o código do dry-run não são definidos (lacuna).",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_configuration_reaches_every_request",
+   "classe": "CFG",
+   "doc": "Ponto: pipeline → requisição. Regra: endpoint {LLM_BASE_URL}/chat/completions, LLM_MODEL em `model`, LLM_MAX_TOKENS (limites) em `max_tokens`, mensagens [system, user], chave só no cabeçalho Bearer e nunca no corpo, uma chamada por evento.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_structured_mode_is_applied_to_every_request",
+   "classe": "CFG",
+   "doc": "Ponto: pipeline → requisição. Regra: LLM_STRUCTURED_MODE define o `response_format`; no json_schema, name=triage_explanation, strict=true e os três campos obrigatórios.",
+   "res": {
+    "passou": 3
+   }
+  },
+  {
+   "teste": "test_only_sampled_log_data_leaves_the_machine",
+   "classe": "DADOS",
+   "doc": "Ponto: pipeline → requisição. Regra: saem só o template e amostras de no máximo 3 IPs, 3 usuários e 3 linhas originais por evento. O log é o fixture com cada linha repetida para 10 IPs (203.0.113.0/24) e 10 usuários sintéticos, para que os eventos tenham mais de 3 de cada.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_timeout_seconds_is_applied_to_each_call",
+   "classe": "REDE",
+   "doc": "Ponto: cliente HTTP ↔ servidor. Regra: LLM_TIMEOUT_SECONDS (limites 1.0 e 300.0) limita uma chamada; estouro → código 1 e \"Timeout ao consultar o LLM: ...\", nomeando a variável.",
+   "res": {
+    "falhou": 2
+   }
+  },
+  {
+   "teste": "test_network_failure_does_not_expose_internal_exception",
+   "classe": "REDE",
+   "doc": "Ponto: cliente HTTP ↔ servidor (rede). Regra da equipe: nenhuma exceção interna exposta; havendo saída de erro, ela nomeia LLM_BASE_URL. Código e novas tentativas: lacunas.",
+   "res": {
+    "falhou": 2
+   }
+  },
+  {
+   "teste": "test_invalid_key_is_authentication_error_without_retry",
+   "classe": "CFGINV",
+   "doc": "Ponto: servidor → CLI. Regra: chave inválida → código 1, \"Erro de autenticação no provedor LLM: ...\" com o status; 401 não é falha transitória, logo não há nova tentativa.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_server_error_is_retried_exactly_max_retries_times",
+   "classe": "TRANS",
+   "doc": "Ponto: cliente HTTP ↔ servidor. Regra: 5xx é transitório; LLM_MAX_RETRIES (limites 0 e 5) novas tentativas, nem mais nem menos. O desfecho após esgotá-las é lacuna.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_rate_limit_is_retried_and_event_is_explained",
+   "classe": "TRANS",
+   "doc": "Ponto: cliente HTTP ↔ servidor. Regra: 429 (rate-limit) é transitório; a nova tentativa bem-sucedida gera o relatório completo.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_non_transient_client_error_is_not_retried",
+   "classe": "4XX",
+   "doc": "Ponto: servidor → CLI. Regra: só 5xx e rate-limit têm nova tentativa; um 404 (LLM_BASE_URL ou modelo errado) não. Regra da equipe: sem exceção interna; havendo erro, nomeia o status.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_auto_mode_degrades_when_response_format_is_rejected",
+   "classe": "CFGINV",
+   "doc": "Ponto: servidor → cliente HTTP. Regra: no modo auto, 400 por `response_format` degrada json_schema → json_object → sem response_format, e o evento é explicado.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_auto_mode_does_not_degrade_on_unrelated_400",
+   "classe": "CASC",
+   "doc": "Ponto: servidor → cliente HTTP. Regra: um 400 por outro motivo não degrada (nenhum json_object é tentado). O desfecho desse 400 é lacuna.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_fixed_mode_turns_response_format_400_into_error",
+   "classe": "CASC",
+   "doc": "Ponto: servidor → CLI. Regra: com o modo fixado não há degradação e o 400 vira erro. Regra da equipe: a mensagem nomeia o status 400, sem exceção interna.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_invalid_reply_is_retried_then_listed_as_unexplained",
+   "classe": "CFGINV",
+   "doc": "Ponto: resposta → interpretação → relatório. Regra: 200 OK vazio, não-JSON, sem campo ou com severity fora da lista → nova requisição (LLM_PARSE_RETRIES padrão = 1); persistindo, o evento vai para \"## Eventos não explicados\" e o relatório é gerado normalmente.",
+   "res": {
+    "passou": 4,
+    "falhou": 1
+   }
+  },
+  {
+   "teste": "test_parse_retries_limits_are_applied",
+   "classe": "INV200",
+   "doc": "Ponto: resposta → interpretação. Regra: LLM_PARSE_RETRIES (limites 0 e 3) novas requisições por evento com resposta inválida, nem mais nem menos.",
+   "res": {
+    "passou": 2
+   }
+  },
+  {
+   "teste": "test_report_keeps_recovered_and_unexplained_events",
+   "classe": "INV200",
+   "doc": "Ponto: interpretação → relatório. Regra: a nova requisição válida recupera o evento; o evento que segue inválido é listado e não derruba o relatório dos demais.",
+   "res": {
+    "passou": 1
+   }
+  },
+  {
+   "teste": "test_tolerated_reply_format_is_not_treated_as_invalid",
+   "classe": "CFGINV",
+   "doc": "Ponto: resposta → interpretação → relatório. Regra: cercas markdown, texto em volta e severity em maiúsculas são tolerados (sem nova requisição); explanation e next_action chegam ao relatório.",
+   "res": {
+    "passou": 1
+   }
+  }
+ ]
+}
